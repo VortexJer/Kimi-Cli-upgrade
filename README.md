@@ -42,7 +42,7 @@ kimi1 --help
 ### Linux / macOS
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/kimi-cli-upgrade.git
+git clone https://github.com/VortexJer/Kimi-Cli-upgrade.git
 cd kimi-cli-upgrade
 bash install.sh
 ```
