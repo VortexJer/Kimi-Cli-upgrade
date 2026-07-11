@@ -160,8 +160,7 @@ function launchWithArgs(args, context) {
       compactBeforeContinue(args);
     }
 
-    const skillPath = installSkill();
-    console.log(formatInfo('Skill temporal de kimi1 activado.'));
+    installSkill();
 
     const child = spawn(CONFIG.KIMI_EXE, args, {
       stdio: 'inherit',
@@ -171,7 +170,6 @@ function launchWithArgs(args, context) {
 
     function cleanup() {
       removeSkill();
-      console.log(formatInfo('Skill temporal de kimi1 eliminado.'));
     }
 
     child.on('close', (code) => {

@@ -119,6 +119,14 @@ async function main() {
 
   const args = normalizeArgs(rawArgs);
 
+  // Interactive mode: no args -> launch Kimi TUI with wrapper context
+  if (args.length === 0) {
+    const cwd = process.cwd();
+    const context = loadContext(cwd);
+    await launchInteractive(context);
+    return;
+  }
+
   const maxStepsIdx = args.indexOf('--max-steps');
   if (maxStepsIdx !== -1) {
     const val = args[maxStepsIdx + 1];
