@@ -4,6 +4,15 @@ set -e
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 KIMI1_PATH="$REPO_DIR/bin/kimi1.js"
 
+# Ensure Node.js dependencies are installed
+if [ ! -d "$REPO_DIR/node_modules" ]; then
+  echo "Instalando dependencias de Node.js..."
+  (cd "$REPO_DIR" && npm install)
+  echo "Dependencias instaladas."
+else
+  echo "Dependencias ya instaladas."
+fi
+
 SHELL_RC=""
 if [ -n "$ZSH_VERSION" ] || [ "$SHELL" = "/bin/zsh" ]; then
   SHELL_RC="$HOME/.zshrc"
