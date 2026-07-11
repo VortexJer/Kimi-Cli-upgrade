@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Backups
+*.backup-*
+*.kimi1-backup-*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test files
+*.test.md
+/test-context/
+
+# Logs
+*.log

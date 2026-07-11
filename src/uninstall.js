@@ -1,0 +1,37 @@
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const { uninstallAll } = require('./profile-manager');
+const { formatHeader, formatSuccess, formatError, formatInfo } = require('./formatter');
+
+function uninstall() {
+  console.log(formatHeader('kimi1 uninstall'));
+
+  const results = uninstallAll();
+  for (const result of results) {
+    if (result.backup) {
+      console.log(formatInfo(`Backup creado: ${result.backup}`));
+    }
+    if (result.removedKimi) {
+      console.log(formatSuccess(`Redireccion 'kimi' eliminada de: ${result.profilePath}`));
+    }
+    if (result.removedKimi1) {
+      console.log(formatSuccess(`Alias 'kimi1' eliminado de: ${result.profilePath}`));
+    }
+    if (result.removedHistory) {
+      console.log(formatSuccess(`Selector de historial eliminado de: ${result.profilePath}`));
+    }
+  }
+
+  const projectDir = path.join(os.homedir(), 'kimi-cli-upgrade');
+  if (fs.existsSync(projectDir)) {
+    fs.rmSync(projectDir, { recursive: true, force: true });
+    console.log(formatSuccess(`Directorio del proyecto eliminado: ${projectDir}`));
+  } else {
+    console.log(formatInfo('Directorio del proyecto no encontrado.'));
+  }
+
+  console.log(formatSuccess('Desinstalacion completa. Reinicia tu sesion de PowerShell.'));
+}
+
+module.exports = { uninstall };
