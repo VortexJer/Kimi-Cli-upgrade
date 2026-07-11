@@ -25,7 +25,7 @@ A local wrapper for the official [Kimi Code CLI](https://moonshotai.github.io/ki
 ### Windows (PowerShell)
 
 ```powershell
-git clone https://github.com/YOUR_USERNAME/kimi-cli-upgrade.git
+git clone https://github.com/VortexJer/Kimi-Cli-upgrade.git
 cd kimi-cli-upgrade
 .\install.ps1
 ```
@@ -41,7 +41,7 @@ kimi --list        # same as kimi1 --list
 ### Linux / macOS
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/kimi-cli-upgrade.git
+git clone https://github.com/VortexJer/Kimi-Cli-upgrade.git
 cd kimi-cli-upgrade
 bash install.sh
 ```
