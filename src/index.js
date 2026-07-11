@@ -7,6 +7,7 @@ const { runWithAutoFix, launchWithArgs, launchInteractive } = require('./runner'
 const { buildPrompt } = require('./prompt-builder');
 const { uninstall } = require('./uninstall');
 const { listHistory, showSessionDetail, resumeSessionInteractive, cleanEmptySessions, renameAllSessions } = require('./history');
+const { migrateOfficialSessions } = require('./session-migrator');
 const { enableKimiRedirect, disableKimiRedirect } = require('./profile-manager');
 const { formatHeader, formatInfo, formatSuccess, createTable } = require('./formatter');
 
@@ -33,7 +34,8 @@ const SHORT_FLAGS = {
   '-cp': '--compress',
   '-ca': '--cache',
   '-nc': '--no-context',
-  '-f': '--fix'
+  '-f': '--fix',
+  '-mh': '--migrate-history'
 };
 
 function normalizeArgs(args) {
@@ -54,6 +56,7 @@ function showHelp() {
   console.log('kimi1 --history --resume <id> (-r)');
   console.log('kimi1 --clean-empty (-ce)');
   console.log('kimi1 --rename-sessions (-rs)');
+  console.log('kimi1 --migrate-history (-mh)');
   console.log('');
   console.log('kimi1 --enable-kimi (-e)   redirect "kimi" -> "kimi1"');
   console.log('kimi1 --disable-kimi (-d)  restore original "kimi"');
@@ -147,6 +150,15 @@ async function main() {
       console.log(formatSuccess(`thinking.enabled ajustado a ${bool}`));
     } else {
       console.log(formatInfo(`thinking.enabled actual: ${CONFIG.getThinking()}`));
+    }
+    return;
+  }
+
+  if (args.includes('--migrate-history')) {
+    const result = migrateOfficialSessions();
+    console.log(formatInfo(`Sesiones oficiales migradas: ${result.migrated}`));
+    if (result.skipped > 0) {
+      console.log(formatInfo(`Sesiones ya presentes en kimi1: ${result.skipped}`));
     }
     return;
   }

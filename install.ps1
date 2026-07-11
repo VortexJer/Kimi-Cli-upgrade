@@ -24,6 +24,10 @@ if (-not (Test-Path $nodeModules)) {
     Write-Host "Dependencias ya instaladas." -ForegroundColor Gray
 }
 
+# Migrate official Kimi sessions so --history shows everything from day one
+Write-Host "Migrando historial de sesiones oficiales..." -ForegroundColor Cyan
+& node "$kimi1Script" --migrate-history
+
 # Activate the PowerShell redirect via the wrapper itself
 Write-Host "Activando redireccion 'kimi' -> 'kimi1'..." -ForegroundColor Cyan
 & node "$kimi1Script" --enable-kimi

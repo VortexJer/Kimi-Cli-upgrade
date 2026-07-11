@@ -26,6 +26,10 @@ else
   SHELL_RC="$HOME/.profile"
 fi
 
+# Migrate official Kimi sessions so --history shows everything from day one
+echo "Migrando historial de sesiones oficiales..."
+node "$KIMI1_PATH" --migrate-history
+
 if [ ! -f "$SHELL_RC" ]; then
   touch "$SHELL_RC"
 fi
