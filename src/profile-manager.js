@@ -4,6 +4,7 @@ const os = require('os');
 
 const HOME = os.homedir();
 const KIMI1_SCRIPT = path.resolve(__dirname, '..', 'bin', 'kimi1.js');
+const REDIRECT_FLAG = path.join(HOME, '.kimi-code-kimi1', 'redirect-enabled');
 
 const PROFILE_PATHS = [
   path.join(HOME, 'Documents', 'PowerShell', 'Microsoft.PowerShell_profile.ps1'),
@@ -37,120 +38,160 @@ function writeProfile(profilePath, content) {
   fs.writeFileSync(profilePath, content, 'utf-8');
 }
 
+function isRedirectEnabled() {
+  return fs.existsSync(REDIRECT_FLAG);
+}
+
+function setRedirectEnabled(enabled) {
+  const dir = path.dirname(REDIRECT_FLAG);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  if (enabled) {
+    fs.writeFileSync(REDIRECT_FLAG, '1', 'utf-8');
+  } else {
+    try { fs.unlinkSync(REDIRECT_FLAG); } catch {}
+  }
+}
+
+function hasKimiWrapper(profilePath) {
+  return /#\s*BEGIN kimi1 wrapper/.test(readProfile(profilePath));
+}
+
 function hasKimi1Redirect(profilePath) {
-  const content = readProfile(profilePath);
-  return /function\s+kimi1\s*\{/.test(content);
+  return /function\s+kimi1\s*\{/.test(readProfile(profilePath));
 }
 
-function hasKimiRedirect(profilePath) {
-  const content = readProfile(profilePath);
-  return /#\s*kimi redirect to kimi1/.test(content) || /function\s+kimi\s*\{/.test(content);
-}
-
-function addKimi1Redirect(profilePath) {
-  ensureProfileDir(profilePath);
-  const block = `\n# kimi1 alias\nfunction kimi1 { node "${KIMI1_SCRIPT}" @args }\n`;
-
+function removeAnyKimiBlocks(profilePath) {
   let content = readProfile(profilePath);
-  if (!hasKimi1Redirect(profilePath)) {
-    content += block;
-    writeProfile(profilePath, content);
-    return true;
+  let changed = false;
+
+  // Remove current wrapper blocks
+  const startMarker = '# BEGIN kimi1 wrapper';
+  const endMarker = '# END kimi1 wrapper';
+  let startIdx = content.indexOf(startMarker);
+  while (startIdx !== -1) {
+    const endIdx = content.indexOf(endMarker, startIdx);
+    if (endIdx === -1) break;
+    content = content.substring(0, startIdx) + content.substring(endIdx + endMarker.length);
+    changed = true;
+    startIdx = content.indexOf(startMarker);
   }
-  return false;
-}
 
-function removeKimi1Redirect(profilePath) {
-  let content = readProfile(profilePath);
+  // Remove old hybrid wrapper markers
+  const oldStartMarker = '# BEGIN kimi hybrid wrapper';
+  const oldEndMarker = '# END kimi hybrid wrapper';
+  startIdx = content.indexOf(oldStartMarker);
+  while (startIdx !== -1) {
+    const endIdx = content.indexOf(oldEndMarker, startIdx);
+    if (endIdx === -1) break;
+    content = content.substring(0, startIdx) + content.substring(endIdx + oldEndMarker.length);
+    changed = true;
+    startIdx = content.indexOf(oldStartMarker);
+  }
+
+  // Remove standalone kimi1 alias line and history module import
   const lines = content.split(/\r?\n/);
   const filtered = [];
-  let skip = false;
-  for (const line of lines) {
-    if (line.includes('# kimi1 alias')) {
-      skip = true;
-      continue;
-    }
-    if (skip && line.trim() === '') {
-      skip = false;
-      continue;
-    }
-    if (skip && !line.includes('function kimi1')) {
-      skip = false;
-    }
-    if (line.includes('function kimi1')) {
-      skip = false;
-      continue;
-    }
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.includes('# kimi1 alias')) continue;
+    if (line.includes('function kimi1')) continue;
+    if (line.includes('KimiHistory.psm1')) continue;
+    if (line.includes('Kimi session history selector')) continue;
     filtered.push(line);
   }
   const newContent = filtered.join('\n');
-  if (newContent !== content) {
+  if (newContent !== content) changed = true;
+
+  if (changed) {
     writeProfile(profilePath, newContent);
-    return true;
   }
-  return false;
+  return changed;
 }
 
-function addKimiRedirect(profilePath) {
+function buildKimiWrapperBlock(kimi1Script) {
+  const flagPath = REDIRECT_FLAG.replace(/\\/g, '\\');
+  return `
+# BEGIN kimi1 wrapper
+if (Get-Alias kimi -ErrorAction SilentlyContinue) { Remove-Alias kimi -Force }
+function kimi1 { node "${kimi1Script}" @args }
+
+function kimi {
+    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$KimiArgs)
+    $kimiExe = (Get-Command kimi -CommandType Application | Select-Object -First 1).Source
+    if ($KimiArgs -contains '--help') {
+        & $kimiExe --help
+        Write-Host ''
+        node "${kimi1Script}" --help
+        return
+    }
+    $redirectFlag = "${flagPath}"
+    $redirectEnabled = Test-Path $redirectFlag
+    if ($redirectEnabled) {
+        node "${kimi1Script}" @KimiArgs
+        return
+    }
+    $kimi1Flags = @{
+        '--history' = $true; '--hist' = $true; '--sessions' = $true; '--select' = $true; '--pick' = $true;
+        '--list' = $true; '--list-history' = $true; '--table' = $true;
+        '--rename-sessions' = $true; '--rs' = $true;
+        '--clean-empty' = $true; '--clean' = $true; '--purge' = $true;
+        '--dry-run' = $true; '--dr' = $true;
+        '--enable-kimi' = $true; '--e-k' = $true;
+        '--disable-kimi' = $true; '--d-k' = $true;
+        '--max-steps' = $true; '--ms' = $true;
+        '--thinking' = $true; '--th' = $true;
+        '--compress' = $true; '--cp' = $true;
+        '--cache' = $true; '--ca' = $true;
+        '--no-context' = $true; '--nc' = $true;
+        '--fix' = $true; '-f' = $true;
+        '-h' = $true; '-l' = $true; '-rs' = $true; '-ce' = $true; '-dr' = $true;
+        '-e' = $true; '-d' = $true; '-he' = $true; '-i' = $true; '-r' = $true
+    }
+    $useKimi1 = $false
+    foreach ($arg in $KimiArgs) {
+        if ($kimi1Flags.ContainsKey($arg)) { $useKimi1 = $true; break }
+    }
+    if ($useKimi1) {
+        node "${kimi1Script}" @KimiArgs
+    } else {
+        & $kimiExe @KimiArgs
+    }
+}
+# END kimi1 wrapper
+`;
+}
+
+function addKimiWrapper(profilePath) {
   ensureProfileDir(profilePath);
-  const block = `\n# kimi redirect to kimi1\nfunction kimi { node "${KIMI1_SCRIPT}" @args }\n`;
-
-  let content = readProfile(profilePath);
-  if (!hasKimiRedirect(profilePath)) {
-    content += block;
-    writeProfile(profilePath, content);
-    return true;
-  }
-  return false;
+  removeAnyKimiBlocks(profilePath);
+  const block = buildKimiWrapperBlock(KIMI1_SCRIPT);
+  const content = readProfile(profilePath) + block;
+  writeProfile(profilePath, content);
+  return true;
 }
 
-function removeKimiRedirect(profilePath) {
-  let content = readProfile(profilePath);
-  const lines = content.split(/\r?\n/);
-  const filtered = [];
-  let skip = false;
-  for (const line of lines) {
-    if (line.includes('# kimi redirect to kimi1')) {
-      skip = true;
-      continue;
-    }
-    if (skip && line.trim() === '') {
-      skip = false;
-      continue;
-    }
-    if (skip && !line.includes('function kimi {')) {
-      skip = false;
-    }
-    if (line.includes('function kimi {')) {
-      skip = false;
-      continue;
-    }
-    filtered.push(line);
-  }
-  const newContent = filtered.join('\n');
-  if (newContent !== content) {
-    writeProfile(profilePath, newContent);
-    return true;
-  }
-  return false;
+function removeKimiWrapper(profilePath) {
+  return removeAnyKimiBlocks(profilePath);
 }
 
 function enableKimiRedirect() {
+  setRedirectEnabled(true);
   const results = [];
   for (const profilePath of PROFILE_PATHS) {
     const backup = backupProfile(profilePath);
-    const added = addKimiRedirect(profilePath);
+    // Ensure the wrapper is installed and clean (only one block)
+    const added = hasKimiWrapper(profilePath) ? false : addKimiWrapper(profilePath);
     results.push({ profilePath, backup, added });
   }
   return results;
 }
 
 function disableKimiRedirect() {
+  setRedirectEnabled(false);
   const results = [];
   for (const profilePath of PROFILE_PATHS) {
     const backup = backupProfile(profilePath);
-    const removed = removeKimiRedirect(profilePath);
-    results.push({ profilePath, backup, removed });
+    results.push({ profilePath, backup, removed: true });
   }
   return results;
 }
@@ -159,44 +200,28 @@ function installAll() {
   const results = [];
   for (const profilePath of PROFILE_PATHS) {
     const backup = backupProfile(profilePath);
-    const addedKimi1 = addKimi1Redirect(profilePath);
-    const addedKimi = addKimiRedirect(profilePath);
-    results.push({ profilePath, backup, addedKimi1, addedKimi });
+    const added = addKimiWrapper(profilePath);
+    results.push({ profilePath, backup, added });
   }
   return results;
 }
 
-function removeHistoryModule(profilePath) {
-  if (!fs.existsSync(profilePath)) return false;
-  const content = fs.readFileSync(profilePath, 'utf-8');
-  const lines = content.split(/\r?\n/);
-  const filtered = lines.filter(line => {
-    return !line.includes('KimiHistory.psm1') &&
-           !line.includes('Kimi session history selector');
-  });
-  if (filtered.length !== lines.length) {
-    fs.writeFileSync(profilePath, filtered.join('\n'), 'utf-8');
-    return true;
-  }
-  return false;
-}
-
 function uninstallAll() {
+  setRedirectEnabled(false);
   const results = [];
   for (const profilePath of PROFILE_PATHS) {
     const backup = backupProfile(profilePath);
-    const removedKimi = removeKimiRedirect(profilePath);
-    const removedKimi1 = removeKimi1Redirect(profilePath);
-    const removedHistory = removeHistoryModule(profilePath);
-    results.push({ profilePath, backup, removedKimi, removedKimi1, removedHistory });
+    const removed = removeKimiWrapper(profilePath);
+    results.push({ profilePath, backup, removed });
   }
   return results;
 }
 
 module.exports = {
   findProfiles,
-  hasKimiRedirect,
+  hasKimiRedirect: hasKimiWrapper,
   hasKimi1Redirect,
+  isRedirectEnabled,
   enableKimiRedirect,
   disableKimiRedirect,
   installAll,

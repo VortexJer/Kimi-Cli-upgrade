@@ -1,9 +1,17 @@
 const { spawn } = require('child_process');
+const path = require('path');
 const CONFIG = require('./config');
 const { buildPrompt } = require('./prompt-builder');
 const { installSkill, removeSkill } = require('./skill-manager');
 const { formatHeader, formatError, formatSuccess, formatInfo, prettyPrint } = require('./formatter');
-const { autoRenameLatestSession } = require('./history');
+const { saveSessionTitleByPrompt } = require('./history');
+const { compactSession, compactLatestSession } = require('./session-compactor');
+const { getCachedResponse, setCachedResponse } = require('./response-cache');
+
+function ensureKimi1Env() {
+  CONFIG.setupKimi1Home();
+  return { ...process.env, KIMI_CODE_HOME: CONFIG.KIMI1_HOME };
+}
 
 function tailLines(text, n) {
   const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
@@ -11,17 +19,32 @@ function tailLines(text, n) {
   return lines.slice(-n).join('\n');
 }
 
-function pruneHistory(history) {
-  // Keep only the latest user prompt, the latest assistant response, and any error turns.
-  if (history.length <= 2) return history;
-  const lastUser = history.filter(h => h.role === 'user').pop();
-  const lastAssistant = history.filter(h => h.role === 'assistant').pop();
-  const errors = history.filter(h => h.role === 'error');
-  const pruned = [];
-  if (lastUser) pruned.push(lastUser);
-  if (lastAssistant) pruned.push(lastAssistant);
-  pruned.push(...errors);
-  return pruned;
+function getArgValue(args, flags) {
+  for (const flag of flags) {
+    const idx = args.indexOf(flag);
+    if (idx !== -1 && args[idx + 1]) return args[idx + 1];
+  }
+  return null;
+}
+
+function isContinuation(args) {
+  return args.includes('-c') || args.includes('--continue') ||
+         args.includes('-S') || args.includes('--session');
+}
+
+function compactBeforeContinue(args) {
+  const sessionId = getArgValue(args, ['-S', '--session']);
+  let result;
+  if (sessionId) {
+    result = compactSession(sessionId);
+  } else if (args.includes('-c') || args.includes('--continue')) {
+    result = compactLatestSession();
+  }
+  if (result && result.compacted) {
+    console.log(formatInfo(
+      `Session context compacted: ${(result.originalSize / 1024).toFixed(1)} KB -> ${(result.newSize / 1024).toFixed(1)} KB (${result.droppedEvents} events dropped)`
+    ));
+  }
 }
 
 function runKimi(prompt) {
@@ -29,7 +52,8 @@ function runKimi(prompt) {
     const args = ['-p', prompt, '--output-format', 'text'];
     const child = spawn(CONFIG.KIMI_EXE, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true
+      windowsHide: true,
+      env: ensureKimi1Env()
     });
 
     let stdout = '';
@@ -53,75 +77,105 @@ function runKimi(prompt) {
   });
 }
 
-async function runWithAutoFix(userPrompt, context) {
-  let history = [];
-  let currentPrompt = buildPrompt(userPrompt, context, { history });
-  let retries = 0;
+async function runWithAutoFix(userPrompt, context, options = {}) {
+  const { fix = false, compress = false, cache = false } = options;
 
   console.log(formatHeader('kimi1 wrapper active'));
 
-  while (retries <= CONFIG.MAX_RETRIES) {
-    history.push({ role: 'user', content: currentPrompt });
-    const result = await runKimi(currentPrompt);
+  // Always run from an isolated home with strict loop_control.
+  ensureKimi1Env();
 
-    // Pretty-print stdout from Kimi
-    if (result.stdout) {
-      console.log(prettyPrint(result.stdout));
-    }
+  const finalPrompt = buildPrompt(userPrompt, context, {
+    compress: compress || false
+  });
 
-    if (result.code === 0 && !result.stderr) {
-      history.push({ role: 'assistant', content: result.stdout });
-      console.log(formatSuccess('Execution completed.'));
-      await autoRenameLatestSession(process.cwd());
+  // Optional response cache for repeated prompts.
+  if (cache) {
+    const cached = getCachedResponse(finalPrompt);
+    if (cached) {
+      console.log(formatInfo('Respuesta recuperada de cache.'));
+      console.log(prettyPrint(cached));
       return;
     }
-
-    // Error detected -> auto-fix loop
-    const errorSnippet = tailLines(result.stderr || result.stdout || 'Unknown error', CONFIG.ERROR_TAIL_LINES);
-    history.push({ role: 'error', content: errorSnippet });
-
-    console.log(formatError(`Error detected (attempt ${retries + 1}/${CONFIG.MAX_RETRIES + 1}):`));
-    console.log(errorSnippet);
-
-    if (retries >= CONFIG.MAX_RETRIES) {
-      console.log(formatError('Max retries reached. Stopping auto-fix loop.'));
-      await autoRenameLatestSession(process.cwd());
-      return;
-    }
-
-    // Build next prompt with auto-fix context, compressed and filtered by relevance
-    history = pruneHistory(history);
-    currentPrompt = buildPrompt(userPrompt, context, {
-      autoFix: true,
-      previousError: errorSnippet,
-      compress: true,
-      history
-    });
-
-    retries++;
   }
+
+  // 1. Single attempt
+  const firstResult = await runKimi(finalPrompt);
+
+  if (firstResult.stdout) {
+    console.log(prettyPrint(firstResult.stdout));
+  }
+
+  const success = firstResult.code === 0 && !firstResult.stderr;
+
+  if (success) {
+    if (cache) setCachedResponse(finalPrompt, firstResult.stdout);
+    console.log(formatSuccess('Execution completed.'));
+    saveSessionTitleByPrompt(userPrompt, process.cwd());
+    return;
+  }
+
+  if (!fix) {
+    console.log(formatError('Execution failed. Use --fix to retry with auto-correction.'));
+    saveSessionTitleByPrompt(userPrompt, process.cwd());
+    return;
+  }
+
+  // 2. Single correction attempt (opt-in)
+  const errorSnippet = tailLines(firstResult.stderr || firstResult.stdout || 'Unknown error', CONFIG.ERROR_TAIL_LINES);
+  console.log(formatError('Error detected:'));
+  console.log(errorSnippet);
+
+  const correctionPrompt = buildPrompt(userPrompt, context, {
+    autoFix: true,
+    previousError: errorSnippet,
+    previousOutput: firstResult.stdout,
+    compress: true
+  });
+
+  console.log(formatInfo('Running single correction attempt...'));
+  const finalResult = await runKimi(correctionPrompt);
+
+  if (finalResult.stdout) {
+    console.log(prettyPrint(finalResult.stdout));
+  }
+
+  if (finalResult.code === 0 && !finalResult.stderr) {
+    if (cache) setCachedResponse(correctionPrompt, finalResult.stdout);
+    console.log(formatSuccess('Correction applied.'));
+  } else {
+    console.log(formatError('Correction failed. Manual review required.'));
+  }
+
+  saveSessionTitleByPrompt(userPrompt, process.cwd());
 }
 
 function launchWithArgs(args, context) {
   return new Promise((resolve) => {
-    const skillPath = installSkill(context);
-    console.log(formatInfo('Contexto local inyectado via skill temporal.'));
-    console.log(formatInfo(`Skill: ${skillPath}`));
+    ensureKimi1Env();
+
+    // If the user is continuing a session, aggressively compact old loop events
+    // before the binary loads the wire and starts burning tokens.
+    if (isContinuation(args)) {
+      compactBeforeContinue(args);
+    }
+
+    const skillPath = installSkill();
+    console.log(formatInfo('Skill temporal de kimi1 activado.'));
 
     const child = spawn(CONFIG.KIMI_EXE, args, {
       stdio: 'inherit',
-      windowsHide: false
+      windowsHide: false,
+      env: ensureKimi1Env()
     });
 
     function cleanup() {
       removeSkill();
-      autoRenameLatestSession(process.cwd());
       console.log(formatInfo('Skill temporal de kimi1 eliminado.'));
     }
 
-    child.on('close', async (code) => {
+    child.on('close', (code) => {
       cleanup();
-      await autoRenameLatestSession(process.cwd());
       resolve(code);
     });
 
@@ -140,4 +194,4 @@ function launchInteractive(context) {
   return launchWithArgs([], context);
 }
 
-module.exports = { runWithAutoFix, launchWithArgs, launchInteractive, tailLines, pruneHistory };
+module.exports = { runWithAutoFix, launchWithArgs, launchInteractive, tailLines };

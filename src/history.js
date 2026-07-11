@@ -5,7 +5,7 @@ const { spawnSync } = require('child_process');
 const CONFIG = require('./config');
 const { formatHeader, formatInfo, formatSuccess, createTable } = require('./formatter');
 
-const SESSION_INDEX = path.join(os.homedir(), '.kimi-code', 'session_index.jsonl');
+const SESSION_INDEX = path.join(CONFIG.KIMI1_HOME, 'session_index.jsonl');
 
 function readJsonSafe(filePath) {
   try {
@@ -94,65 +94,55 @@ function tokenize(text) {
     .filter(w => w.length > 1);
 }
 
-function generateTitleHeuristic(prompt) {
+const TITLE_RULES = [
+  { pattern: /(?:mejora|mejorar|upgrade|modificar|actualizar).*kimi/i, title: 'Mejora el CLI de Kimi' },
+  { pattern: /(?:continuar|contin[uú]e|resume).*sesi[oó]n/i, title: 'Continuar sesión anterior' },
+  { pattern: /(?:historial|history).*chat/i, title: 'Historial de chats en Kimi' },
+  { pattern: /claude/i, title: 'Importar chats de Claude Code' },
+  { pattern: /(?:tabla|table).*lenguaje/i, title: 'Tabla de lenguajes de programación' },
+  { pattern: /(?:script|scraper).*(?:enter|tecla|pulsador)/i, title: 'Pulsador automático de Enter' },
+  { pattern: /(?:script|scraper)/i, title: 'Script personalizado' },
+  { pattern: /(?:tabla|table)/i, title: 'Tabla informativa' }
+];
+
+function applyTitleRules(prompt) {
+  for (const rule of TITLE_RULES) {
+    if (rule.pattern.test(prompt)) return rule.title;
+  }
+  return null;
+}
+
+function extractLocalTitle(prompt) {
   if (!prompt) return 'Nueva sesión';
-  const words = tokenize(prompt)
+
+  const ruleTitle = applyTitleRules(prompt);
+  if (ruleTitle) return ruleTitle;
+
+  const clean = prompt
+    .replace(/["'`]+/g, '')
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const words = clean
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(w => w.length >= 3)
     .filter(w => !STOP_WORDS.has(w))
-    .filter(w => isNaN(parseInt(w)) || w.length > 3);
+    .slice(0, 6);
 
-  if (words.length === 0) return truncate(prompt.replace(/\s+/g, ' ').trim(), 40) || 'Nueva sesión';
+  if (words.length === 0) {
+    return truncate(clean, 40) || 'Nueva sesión';
+  }
 
-  const selected = words.slice(0, 5);
-  const title = selected
+  const title = words
     .map(w => w.charAt(0).toUpperCase() + w.slice(1))
     .join(' ');
   return truncate(title, 60);
 }
 
-function generateTitleWithAI(prompt) {
-  if (!prompt) return 'Nueva sesión';
-  try {
-    const titlePrompt = [
-      'Eres un asistente que nombra conversaciones. Lee el primer mensaje del usuario y genera una frase corta y concisa (3-6 palabras) que identifique la conversación por lo que pide el usuario.',
-      'No hace falta ser muy específica, pero debe tener sentido y sonar natural, no como un resumen literal ni una frase rota.',
-      '',
-      'Ejemplos:',
-      '- "Actúa como experto y ayúdame a mejorar mi CLI de Kimi con nuevas funciones" → "Mejora el CLI de Kimi"',
-      '- "Hazme un script en Python para descargar imágenes de una web" → "Scraper de imágenes"',
-      '- "Explícame cómo funciona la recursividad en JavaScript" → "Recursividad en JavaScript"',
-      '- "quiero continuar la sesión session_abc123" → "Continuar sesión anterior"',
-      '',
-      'Responde SOLO con el título encerrado entre ###TITULO### y ###FIN###. Sin explicaciones.',
-      '',
-      'Primer mensaje del usuario:',
-      prompt.substring(0, 1200)
-    ].join('\n');
-
-    const result = spawnSync(CONFIG.KIMI_EXE, ['-p', titlePrompt, '--output-format', 'text'], {
-      encoding: 'utf-8',
-      windowsHide: true,
-      timeout: 20000,
-      stdio: ['ignore', 'pipe', 'pipe']
-    });
-
-    if (result.status === 0 && result.stdout) {
-      const match = result.stdout.match(/###TITULO###\s*([\s\S]*?)\s*###FIN###/);
-      const title = match ? match[1] : result.stdout;
-      const cleanTitle = title
-        .replace(/["'`]+/g, '')
-        .replace(/\n/g, ' ')
-        .trim()
-        .split('.')[0];
-      if (cleanTitle) return truncate(cleanTitle, 60);
-    }
-  } catch (err) {
-    // fall back to heuristic
-  }
-  return generateTitleHeuristic(prompt);
-}
-
 function generateTitle(prompt) {
-  return generateTitleWithAI(prompt);
+  return extractLocalTitle(prompt);
 }
 
 function isBadTitle(title, firstPrompt) {
@@ -178,7 +168,7 @@ function ensureSessionTitle(entry) {
     return state.title;
   }
 
-  const newTitle = generateTitleHeuristic(firstPrompt);
+  const newTitle = generateTitle(firstPrompt);
   if (newTitle && newTitle !== state.title) {
     state.title = newTitle;
     state.isCustomTitle = true;
@@ -191,70 +181,37 @@ function ensureSessionTitle(entry) {
   return newTitle;
 }
 
-function isTitleGenerationSession(entry) {
-  const firstPrompt = readFirstPrompt(entry.sessionDir);
-  if (!firstPrompt) return false;
-  const lower = firstPrompt.toLowerCase();
-  return lower.includes('nombra conversaciones') || lower.includes('###titulo###') || lower.includes('eres un asistente que nombra');
-}
-
-function cleanupTitleGenerationSessions() {
+function saveSessionTitleByPrompt(prompt, workDir) {
+  if (!prompt) return null;
   const index = readSessionIndex();
-  const keep = [];
-  const remove = [];
+  if (index.length === 0) return null;
 
-  for (const entry of index) {
-    if (isTitleGenerationSession(entry)) {
-      remove.push(entry);
-    } else {
-      keep.push(entry);
-    }
-  }
+  const candidates = index
+    .filter(e => !workDir || (e.workDir || '').toLowerCase() === workDir.toLowerCase())
+    .map(e => {
+      const state = readJsonSafe(path.join(e.sessionDir, 'state.json')) || {};
+      return { entry: e, updatedAt: state.updatedAt || state.createdAt, state };
+    })
+    .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
 
-  for (const entry of remove) {
+  if (candidates.length === 0) return null;
+
+  const { entry, state } = candidates[0];
+  const newTitle = extractLocalTitle(prompt);
+  if (newTitle && newTitle !== state.title) {
+    state.title = newTitle;
+    state.isCustomTitle = true;
     try {
-      if (fs.existsSync(entry.sessionDir)) {
-        fs.rmSync(entry.sessionDir, { recursive: true, force: true });
-      }
+      fs.writeFileSync(path.join(entry.sessionDir, 'state.json'), JSON.stringify(state, null, 2), 'utf-8');
+      return newTitle;
     } catch (err) {
       // ignore
     }
   }
-
-  const newIndexContent = keep.map(e => JSON.stringify(e)).join('\n');
-  if (keep.length > 0) {
-    fs.writeFileSync(SESSION_INDEX, newIndexContent + '\n', 'utf-8');
-  } else {
-    fs.writeFileSync(SESSION_INDEX, '', 'utf-8');
-  }
-
-  return remove.length;
+  return null;
 }
 
-function ensureSessionTitleWithAI(entry) {
-  const statePath = path.join(entry.sessionDir, 'state.json');
-  const state = readJsonSafe(statePath) || {};
-
-  const firstPrompt = readFirstPrompt(entry.sessionDir) || state.lastPrompt || '';
-
-  if (!isBadTitle(state.title, firstPrompt)) {
-    return state.title;
-  }
-
-  const newTitle = generateTitleWithAI(firstPrompt);
-  if (newTitle && newTitle !== state.title) {
-    state.title = newTitle;
-    state.isCustomTitle = true;
-    try {
-      fs.writeFileSync(statePath, JSON.stringify(state, null, 2), 'utf-8');
-    } catch (err) {
-      // ignore write errors
-    }
-  }
-  return newTitle;
-}
-
-function renameAllSessionsWithAI(options = {}) {
+function renameAllSessions(options = {}) {
   const { silent = false, force = false } = options;
   const index = readSessionIndex();
   let renamed = 0;
@@ -266,7 +223,7 @@ function renameAllSessionsWithAI(options = {}) {
 
     if (!force && !isBadTitle(state.title, firstPrompt)) continue;
 
-    const newTitle = generateTitleWithAI(firstPrompt);
+    const newTitle = extractLocalTitle(firstPrompt);
     if (newTitle) {
       state.title = newTitle;
       state.isCustomTitle = true;
@@ -281,12 +238,7 @@ function renameAllSessionsWithAI(options = {}) {
   }
 
   if (!silent) {
-    console.log(formatSuccess(`Renamed ${renamed} session(s) with AI.`));
-  }
-
-  const cleaned = cleanupTitleGenerationSessions();
-  if (!silent && cleaned > 0) {
-    console.log(formatInfo(`Cleaned up ${cleaned} temporary title-generation session(s).`));
+    console.log(formatSuccess(`Renamed ${renamed} session(s).`));
   }
 
   return renamed;
@@ -527,24 +479,6 @@ async function fallbackMenu(sessions, resumeCallback) {
   await resumeCallback(selected.sessionId);
 }
 
-async function autoRenameLatestSession(workDir) {
-  const index = readSessionIndex();
-  if (index.length === 0) return null;
-
-  const candidates = index
-    .filter(e => !workDir || (e.workDir || '').toLowerCase() === workDir.toLowerCase())
-    .map(e => {
-      const state = readJsonSafe(path.join(e.sessionDir, 'state.json')) || {};
-      return { entry: e, updatedAt: state.updatedAt || state.createdAt };
-    })
-    .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
-
-  if (candidates.length === 0) return null;
-  const title = ensureSessionTitleWithAI(candidates[0].entry);
-  cleanupTitleGenerationSessions();
-  return title;
-}
-
 function isEmptySession(session) {
   const title = (session.title || '').trim();
   const lastPrompt = (session.lastPrompt || '').trim();
@@ -616,5 +550,5 @@ async function resumeSessionInteractive(resumeCallback) {
   await interactiveSessionMenu(resumeCallback);
 }
 
-module.exports = { listHistory, showSessionDetail, resumeSessionInteractive, interactiveSessionMenu, cleanEmptySessions, autoRenameLatestSession, renameAllSessionsWithAI };
+module.exports = { listHistory, showSessionDetail, resumeSessionInteractive, interactiveSessionMenu, cleanEmptySessions, saveSessionTitleByPrompt, renameAllSessions };
 

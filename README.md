@@ -6,15 +6,12 @@ A local wrapper for the official [Kimi Code CLI](https://moonshotai.github.io/ki
 
 ## Features
 
-- **Local context injection**: Auto-loads `KIMI.md`, `.ai-shared-context.md`, and `.globalcontext.md` from the current directory.
-- **Context Caching**: Static context is placed at the very beginning of the prompt to maximize provider-side context caching.
+- **Local context injection (prompt mode only)**: Auto-loads `KIMI.md`, `.ai-shared-context.md`, and `.globalcontext.md` from the current directory and sends them inside the `-p` prompt.
 - **Strict no-verbiage**: Forces concise, technical-only responses.
-- **Auto-correction loop**: On terminal errors, retries with compressed prompts and error-tail filtering (last 20 lines).
-- **Dynamic temperature**: Prompt instructs the model to use precision mode during auto-correction.
-- **Session pruning**: Keeps only relevant history turns during the auto-fix loop.
+- **Single-shot auto-correction**: On terminal errors, packages the error + previous output into one final correction prompt instead of looping.
 - **Arrow-key session selector**: `kimi1 --history` opens a Claude-style interactive picker (Up/Down, Enter, Esc).
 - **Plain session table**: `kimi1 --list` shows a compact table when you do not need the picker.
-- **Auto-generated session names**: old sessions are renamed from raw prompts to concise topic titles based on the first message.
+- **Auto-generated session names (0 tokens)**: old sessions are renamed locally from the first user prompt using pattern rules + keyword extraction. No API calls.
 - **Optional `kimi` redirect**: Activate/deactivate full `kimi` → `kimi1` redirection at any time.
 - **Visual formatting**: Colored output and clean tables via `chalk` and `cli-table3`.
 
@@ -33,10 +30,12 @@ cd kimi-cli-upgrade
 .\install.ps1
 ```
 
-Restart PowerShell, then run:
+Restart PowerShell. The installer creates both `kimi1` and a hybrid `kimi` wrapper, so most kimi1 commands are also available through the official `kimi` command:
 
 ```powershell
 kimi1 --help
+kimi --history     # same as kimi1 --history
+kimi --list        # same as kimi1 --list
 ```
 
 ### Linux / macOS
@@ -80,7 +79,7 @@ kimi1 --history --resume <id> (-r)
 # Remove empty/unused sessions (auto-cleaned when opening --history / --list)
 kimi1 --clean-empty (-ce)
 
-# Rename old sessions using AI (reads first prompt, asks Kimi for a title)
+# Rename old sessions based on the first prompt (heuristic pattern rules)
 kimi1 --rename-sessions (-rs)
 
 # Dry-run without calling the API
@@ -99,44 +98,49 @@ kimi1 --help (-he)
 
 ## How it works
 
-1. `kimi1` reads local context files in the current directory.
-2. It injects that context at the top of the system prompt.
-3. It forwards the enriched prompt to your official `kimi` binary.
-4. In interactive/resume modes it temporarily installs a local skill so Kimi loads the context natively.
+1. In **prompt mode** (`kimi1 "..."`), `kimi1` loads local context files and wraps them in XML tags at the top of the `-p` prompt.
+2. It forwards the enriched prompt to your official `kimi` binary.
+3. If the executed command fails, it builds a **single** correction prompt with the tail of the error and the previous output, then calls Kimi one more time.
+4. In **interactive/resume** modes it installs a minimal local skill with high-level operational rules only (no static context injection).
 5. When the session ends, the temporary skill is cleaned up.
+6. Session titles are generated locally from the first user prompt, with zero API calls.
 
-## Optional: redirect `kimi` to `kimi1`
+## Hybrid `kimi` wrapper
 
-After installation you can make every `kimi` call go through the wrapper:
+The installer registers a hybrid `kimi` function in your PowerShell profile. It intercepts kimi1-specific flags (`--history`, `--list`, `--rename-sessions`, `--clean-empty`, `--dry-run`, etc.) and sends them to `kimi1`, while passing everything else to the official `kimi.exe`.
 
-```powershell
-kimi1 --enable-kimi
-kimi1 --e-k        # short alias
-```
+When you run `kimi --help`, you see the official help followed by the kimi1 help, so all extra commands are documented.
 
-To restore the original `kimi` behavior:
+To remove the hybrid wrapper and restore plain `kimi.exe`:
 
 ```powershell
 kimi1 --disable-kimi
 kimi1 --d-k        # short alias
 ```
 
-Remember to restart your shell after enabling/disabling.
+To re-add it later:
+
+```powershell
+kimi1 --enable-kimi
+kimi1 --e-k        # short alias
+```
+
+Restart your shell after enabling/disabling.
 
 ## Token-saving architecture
 
 | Technique | How it is implemented |
 |-----------|----------------------|
-| Context Caching | `KIMI.md` + shared context placed at the start of every prompt |
+| Zero-token titles | Session names extracted locally with pattern rules + keyword extraction |
+| Single-shot auto-fix | At most 2 Kimi calls: initial + one correction, not a loop |
 | Context minification | Local whitespace/newline compression of context files before injection |
 | Relevance pruning | Only history messages sharing keywords with the current prompt are kept |
 | Payload guard | System prompt forbids reading binary/multimedia/dependency bytes |
 | Error compression | Terminal error output is truncated to the last 20 lines |
-| Session pruning | Intermediate successful command logs are dropped from the retry context |
 | No-verbiage | Strict system prompt forbids greetings, explanations, and filler text |
 | Prompt compression | Auto-fix prompts strip redundant grammar/connectors |
-| Dynamic precision | Auto-fix mode instructs the model to use temperature 0.0 behavior |
-| Compressed code output | AI returns compact code blocks; wrapper pretty-prints them locally |
+| XML-structured payload | Static context wrapped in `<contexto_estatico>` to help backend caching |
+| Minimal skill | `SKILL.md` contains only high-level operational rules, no duplicated static context |
 
 ## Uninstall
 

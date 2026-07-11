@@ -6,11 +6,11 @@ const { loadContext } = require('./context-loader');
 const { runWithAutoFix, launchWithArgs } = require('./runner');
 const { buildPrompt } = require('./prompt-builder');
 const { uninstall } = require('./uninstall');
-const { listHistory, showSessionDetail, resumeSessionInteractive, cleanEmptySessions, renameAllSessionsWithAI } = require('./history');
+const { listHistory, showSessionDetail, resumeSessionInteractive, cleanEmptySessions, renameAllSessions } = require('./history');
 const { enableKimiRedirect, disableKimiRedirect } = require('./profile-manager');
 const { formatHeader, formatInfo, formatSuccess, createTable } = require('./formatter');
 
-const SESSION_INDEX = path.join(os.homedir(), '.kimi-code', 'session_index.jsonl');
+const SESSION_INDEX = path.join(CONFIG.KIMI1_HOME, 'session_index.jsonl');
 
 // Short flags: first letter, then first+second if there is a collision
 // (including reserved native Kimi flags: -c, -S, -v). Help intentionally
@@ -27,7 +27,13 @@ const SHORT_FLAGS = {
   '-dr': '--dry-run',
   '-ce': '--clean-empty',
   '-rs': '--rename-sessions',
-  '-id': '--id'
+  '-id': '--id',
+  '-ms': '--max-steps',
+  '-th': '--thinking',
+  '-cp': '--compress',
+  '-ca': '--cache',
+  '-nc': '--no-context',
+  '-f': '--fix'
 };
 
 function normalizeArgs(args) {
@@ -41,7 +47,8 @@ function showHelp() {
   console.log('kimi1 -S <id>         resume session');
   console.log('kimi1 -c              continue previous session');
   console.log('');
-  console.log('kimi1 --history (-h)  pick session with arrow keys');
+  console.log('After install, these commands also work with "kimi":');
+  console.log('kimi --history (-h)   pick session with arrow keys');
   console.log('kimi1 --list (-l)     plain table of sessions');
   console.log('kimi1 --history --id <id> (-id)');
   console.log('kimi1 --history --resume <id> (-r)');
@@ -50,6 +57,15 @@ function showHelp() {
   console.log('');
   console.log('kimi1 --enable-kimi (-e)   redirect "kimi" -> "kimi1"');
   console.log('kimi1 --disable-kimi (-d)  restore original "kimi"');
+  console.log('');
+  console.log('kimi1 --max-steps <n> (-ms)');
+  console.log('kimi1 --thinking on|off (-th)');
+  console.log('');
+  console.log('Token-saving flags (opt-in):');
+  console.log('kimi1 --compress (-cp)        compress prompt before sending');
+  console.log('kimi1 --cache (-ca)           cache identical prompts');
+  console.log('kimi1 --no-context (-nc)      skip KIMI.md/shared context');
+  console.log('kimi1 --fix (-f)              enable single auto-correction retry');
   console.log('');
   console.log('kimi1 --dry-run (-dr) [prompt]');
   console.log('kimi1 --uninstall (-u)');
@@ -103,6 +119,30 @@ async function main() {
 
   const args = normalizeArgs(rawArgs);
 
+  const maxStepsIdx = args.indexOf('--max-steps');
+  if (maxStepsIdx !== -1) {
+    const val = args[maxStepsIdx + 1];
+    if (val && /^[0-9]+$/.test(val)) {
+      const n = CONFIG.setMaxSteps(val);
+      console.log(formatSuccess(`max_steps_per_turn ajustado a ${n}`));
+    } else {
+      console.log(formatInfo(`max_steps_per_turn actual: ${CONFIG.getMaxSteps()}`));
+    }
+    return;
+  }
+
+  const thinkingIdx = args.indexOf('--thinking');
+  if (thinkingIdx !== -1) {
+    const val = args[thinkingIdx + 1];
+    if (val && /^(true|false|on|off|1|0)$/i.test(val)) {
+      const bool = CONFIG.setThinking(val);
+      console.log(formatSuccess(`thinking.enabled ajustado a ${bool}`));
+    } else {
+      console.log(formatInfo(`thinking.enabled actual: ${CONFIG.getThinking()}`));
+    }
+    return;
+  }
+
   if (args.includes('--uninstall')) {
     uninstall();
     return;
@@ -138,7 +178,7 @@ async function main() {
   }
 
   if (args.includes('--rename-sessions')) {
-    renameAllSessionsWithAI({ force: true });
+    renameAllSessions({ force: true });
     return;
   }
 
@@ -182,14 +222,22 @@ async function main() {
     return;
   }
 
+  // Wrapper-only flags (do not reach Kimi's binary)
+  const WRAPPER_FLAGS = ['--compress', '--cache', '--no-context', '--fix'];
+  const compress = args.includes('--compress');
+  const cache = args.includes('--cache');
+  const noContext = args.includes('--no-context');
+  const fix = args.includes('--fix');
+  const stripWrapperFlags = (arr) => arr.filter(arg => !WRAPPER_FLAGS.includes(arg));
+
   // --dry-run mode
   if (args.includes('--dry-run')) {
-    const filteredArgs = args.filter(arg => arg !== '--dry-run');
+    const filteredArgs = stripWrapperFlags(args.filter(arg => arg !== '--dry-run'));
     const userPrompt = filteredArgs.join(' ');
     const cwd = process.cwd();
-    const context = loadContext(cwd);
+    const context = noContext ? {} : loadContext(cwd);
     console.log(formatHeader('DRY RUN - Prompt que se enviaria a Kimi'));
-    console.log(buildPrompt(userPrompt, context));
+    console.log(buildPrompt(userPrompt, context, { compress }));
     return;
   }
 
@@ -211,15 +259,15 @@ async function main() {
   }
 
   // Default: prompt mode
-  const userPrompt = args.join(' ');
+  const userPrompt = stripWrapperFlags(args).join(' ');
   const cwd = process.cwd();
-  const context = loadContext(cwd);
+  const context = noContext ? {} : loadContext(cwd);
 
   if (Object.keys(context).length > 0) {
     console.log(formatInfo(`Contexto cargado desde: ${Object.keys(context).join(', ')}`));
   }
 
-  await runWithAutoFix(userPrompt, context);
+  await runWithAutoFix(userPrompt, context, { fix, compress, cache });
 }
 
 main().catch(err => {

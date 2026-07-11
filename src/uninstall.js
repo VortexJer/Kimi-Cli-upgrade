@@ -31,6 +31,12 @@ function uninstall() {
     console.log(formatInfo('Directorio del proyecto no encontrado.'));
   }
 
+  const isolatedHome = path.join(os.homedir(), '.kimi-code-kimi1');
+  if (fs.existsSync(isolatedHome)) {
+    fs.rmSync(isolatedHome, { recursive: true, force: true });
+    console.log(formatSuccess(`Home aislado de kimi1 eliminado: ${isolatedHome}`));
+  }
+
   console.log(formatSuccess('Desinstalacion completa. Reinicia tu sesion de PowerShell.'));
 }
 

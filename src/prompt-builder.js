@@ -25,7 +25,7 @@ CODE TRANSMISSION FORMAT:
 `.trim();
 
 const AUTO_FIX_PERSONA = `
-MODE: AUTO-CORRECTION (temperature 0.0 implied).
+MODE: AUTO-CORRECTION.
 - Analyze the error below with maximum precision.
 - Propose the minimal fix.
 - Output only the corrected command, code block, or exact file change.
@@ -75,54 +75,73 @@ function filterHistoryByRelevance(history, currentPrompt, threshold = 0.1) {
     if (!msg.content) return false;
     const msgKeywords = extractKeywords(msg.content);
     const score = relevanceScore(msgKeywords, currentKeywords);
-    msg._relevance = score;
     return score >= threshold;
   });
+}
+
+function cleanHistory(history) {
+  return history.map(msg => ({
+    role: msg.role,
+    content: msg.content
+  }));
 }
 
 function buildPrompt(userPrompt, context, options = {}) {
   const {
     autoFix = false,
     previousError = null,
+    previousOutput = null,
     compress: doCompress = false,
     history = []
   } = options;
 
   const parts = [];
 
-  // 1. System instruction at the very top for context caching
-  parts.push('[SYSTEM]');
+  // 1. Static system rules at the very top for potential caching
+  parts.push('<system_rules>');
   parts.push(STRICT_NO_VERBIAGE);
   parts.push(BINARY_GUARD);
   parts.push(COMPRESSED_CODE_RULE);
   if (autoFix) {
     parts.push(AUTO_FIX_PERSONA);
   }
+  parts.push('</system_rules>');
 
-  // 2. Static context (KIMI.md, shared context) -> cached by provider
+  // 2. Static context (KIMI.md, shared context)
   const contextBlock = getContextSummary(context);
   if (contextBlock) {
-    parts.push('\n[CONTEXT]');
+    parts.push('<contexto_estatico>');
     parts.push(contextBlock);
+    parts.push('</contexto_estatico>');
   }
 
-  // 3. Filtered session history by relevance
-  const relevantHistory = filterHistoryByRelevance(history, userPrompt);
+  // 3. Filtered session history (metadata stripped)
+  const relevantHistory = filterHistoryByRelevance(cleanHistory(history), userPrompt);
   if (relevantHistory.length > 0) {
-    parts.push('\n[RELEVANT_HISTORY]');
+    parts.push('<historial_relevante>');
     for (const msg of relevantHistory) {
-      parts.push(`${msg.role}: ${msg.content}`);
+      parts.push(`<${msg.role}>${msg.content}</${msg.role}>`);
     }
+    parts.push('</historial_relevante>');
   }
 
-  // 4. User prompt or auto-fix payload
+  // 4. User instruction or auto-fix payload
   if (autoFix && previousError) {
-    parts.push('\n[AUTO_FIX_TRIGGER]');
-    parts.push(`Previous attempt failed. Error:\n${previousError}`);
-    parts.push('\nFix the error. Return only the corrected command or code.');
+    parts.push('<instruccion>');
+    parts.push('Previous attempt failed. Fix the error and return only the corrected command or code.');
+    parts.push('</instruccion>');
+    parts.push('<error>');
+    parts.push(previousError);
+    parts.push('</error>');
+    if (previousOutput) {
+      parts.push('<codigo_previo>');
+      parts.push(previousOutput);
+      parts.push('</codigo_previo>');
+    }
   } else {
-    parts.push('\n[USER_PROMPT]');
+    parts.push('<instruccion>');
     parts.push(userPrompt);
+    parts.push('</instruccion>');
   }
 
   let finalPrompt = parts.join('\n');
