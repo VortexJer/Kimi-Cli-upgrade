@@ -2,10 +2,17 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { uninstallAll } = require('./profile-manager');
+const { restoreOfficialConfig } = require('./config');
 const { formatHeader, formatSuccess, formatError, formatInfo } = require('./formatter');
 
 function uninstall() {
   console.log(formatHeader('kimi1 uninstall'));
+
+  if (restoreOfficialConfig()) {
+    console.log(formatSuccess('Configuracion oficial de Kimi restaurada desde backup.'));
+  } else {
+    console.log(formatInfo('No se encontro backup de la configuracion oficial.'));
+  }
 
   const results = uninstallAll();
   for (const result of results) {

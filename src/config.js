@@ -188,6 +188,50 @@ function applyMaxStepsToConfig(configPath, n) {
   return true;
 }
 
+const OFFICIAL_CONFIG_BACKUP = path.join(KIMI1_HOME, 'official-config-backup.toml');
+
+function backupOfficialConfig() {
+  const officialConfigPath = path.join(KIMI_HOME, 'config.toml');
+  if (!fs.existsSync(officialConfigPath)) return false;
+  setupKimi1Home();
+  fs.copyFileSync(officialConfigPath, OFFICIAL_CONFIG_BACKUP);
+  return true;
+}
+
+function restoreOfficialConfig() {
+  if (!fs.existsSync(OFFICIAL_CONFIG_BACKUP)) return false;
+  const officialConfigPath = path.join(KIMI_HOME, 'config.toml');
+  fs.copyFileSync(OFFICIAL_CONFIG_BACKUP, officialConfigPath);
+  return true;
+}
+
+function syncOfficialConfigFromIsolated() {
+  setupKimi1Home();
+  const isolatedConfigPath = path.join(KIMI1_HOME, 'config.toml');
+  const officialConfigPath = path.join(KIMI_HOME, 'config.toml');
+  if (!fs.existsSync(isolatedConfigPath)) return false;
+  fs.copyFileSync(isolatedConfigPath, officialConfigPath);
+  return true;
+}
+
+function resetOfficialConfigToDefaults() {
+  const officialConfigPath = path.join(KIMI_HOME, 'config.toml');
+  if (!fs.existsSync(officialConfigPath)) return false;
+  let toml = fs.readFileSync(officialConfigPath, 'utf-8');
+  if (!/^\[loop_control\]$/m.test(toml)) {
+    toml += '\n[loop_control]\nmax_steps_per_turn = 1000\n';
+  } else {
+    toml = toml.replace(/^max_steps_per_turn\s*=\s*\S.*$/m, 'max_steps_per_turn = 1000');
+  }
+  if (!/^\[thinking\]$/m.test(toml)) {
+    toml += '\n[thinking]\nenabled = true\n';
+  } else {
+    toml = toml.replace(/^enabled\s*=\s*\S.*$/m, 'enabled = true');
+  }
+  fs.writeFileSync(officialConfigPath, toml, 'utf-8');
+  return true;
+}
+
 function setMaxSteps(value) {
   const n = parseInt(value, 10);
   if (!Number.isFinite(n) || n < 1) {
@@ -195,13 +239,10 @@ function setMaxSteps(value) {
   }
   setupKimi1Home();
 
-  // 1. Isolated config (always used by kimi1)
+  // Only touch the isolated config here. Official config is synced only when
+  // the kimi -> kimi1 redirect is explicitly enabled.
   const isolatedConfigPath = path.join(KIMI1_HOME, 'config.toml');
   applyMaxStepsToConfig(isolatedConfigPath, n);
-
-  // 2. Official config (so direct kimi.exe calls also respect the choice)
-  const officialConfigPath = path.join(KIMI_HOME, 'config.toml');
-  applyMaxStepsToConfig(officialConfigPath, n);
 
   return n;
 }
@@ -220,6 +261,8 @@ function setThinking(value) {
   }
   const bool = ['true', 'on', '1'].includes(normalized);
   setupKimi1Home();
+  // Only touch the isolated config here. Official config is synced only when
+  // the kimi -> kimi1 redirect is explicitly enabled.
   const configPath = path.join(KIMI1_HOME, 'config.toml');
   let toml = fs.readFileSync(configPath, 'utf-8');
   if (!/^\[thinking\]$/m.test(toml)) {
@@ -241,6 +284,10 @@ const CONFIG = {
   EFFECTIVE_MAX_STEPS,
   getThinking,
   setThinking,
+  backupOfficialConfig,
+  restoreOfficialConfig,
+  syncOfficialConfigFromIsolated,
+  resetOfficialConfigToDefaults,
   PROJECT_DIR: path.join(HOME, 'kimi-cli-upgrade'),
   MAX_RETRIES: 3,
   MAX_CONTINUATIONS: 5,

@@ -27,6 +27,7 @@ const SHORT_FLAGS = {
   '-u': '--uninstall',
   '-e': '--enable-kimi',
   '-d': '--disable-kimi',
+  '-roc': '--restore-official-config',
   '-dr': '--dry-run',
   '-ce': '--clean-empty',
   '-rs': '--rename-sessions',
@@ -64,8 +65,9 @@ function showHelp() {
   console.log('kimi1 --auto-compact [safe|aggressive|off] (-ac)  default: off (recommended)');
   console.log('kimi1 --migrate-history (-mh)');
   console.log('');
-  console.log('kimi1 --enable-kimi (-e)   redirect "kimi" -> "kimi1"');
-  console.log('kimi1 --disable-kimi (-d)  restore original "kimi"');
+  console.log('kimi1 --enable-kimi (-e)          redirect "kimi" -> "kimi1"');
+  console.log('kimi1 --disable-kimi (-d)         restore original "kimi"');
+  console.log('kimi1 --restore-official-config (-roc)  reset official Kimi config (max_steps/thinking)');
   console.log('');
   console.log('kimi1 --max-steps [<n>] (-ms)  interactive menu if no value');
   console.log('kimi1 --thinking [on|off] (-th)  interactive menu if no value');
@@ -219,8 +221,10 @@ async function main() {
     console.log(formatHeader('Redireccion "kimi" -> "kimi1" activada'));
     for (const r of results) {
       console.log(formatInfo(r.profilePath));
-      if (r.backup) console.log(formatInfo(`  Backup: ${r.backup}`));
+      if (r.backup) console.log(formatInfo(`  Backup perfil: ${r.backup}`));
       console.log(r.added ? formatSuccess('  Redireccion anadida.') : formatInfo('  Ya existia.'));
+      if (r.configBackupCreated) console.log(formatSuccess('  Config oficial de Kimi respaldada.'));
+      if (r.configSynced) console.log(formatSuccess('  Config oficial sincronizada con kimi1.'));
     }
     console.log(formatInfo('Reinicia PowerShell para aplicar los cambios.'));
     return;
@@ -231,10 +235,25 @@ async function main() {
     console.log(formatHeader('Redireccion "kimi" -> "kimi1" desactivada'));
     for (const r of results) {
       console.log(formatInfo(r.profilePath));
-      if (r.backup) console.log(formatInfo(`  Backup: ${r.backup}`));
+      if (r.backup) console.log(formatInfo(`  Backup perfil: ${r.backup}`));
       console.log(r.removed ? formatSuccess('  Redireccion eliminada.') : formatInfo('  No estaba activa.'));
+      if (r.configRestored) console.log(formatSuccess('  Config oficial de Kimi restaurada desde backup.'));
+      if (r.configReset) console.log(formatInfo('  Config oficial de Kimi reseteada a valores por defecto (no habia backup).'));
     }
     console.log(formatInfo('Reinicia PowerShell para aplicar los cambios.'));
+    return;
+  }
+
+  if (args.includes('--restore-official-config')) {
+    const restored = CONFIG.restoreOfficialConfig();
+    const reset = restored ? false : CONFIG.resetOfficialConfigToDefaults();
+    if (restored) {
+      console.log(formatSuccess('Configuracion oficial de Kimi restaurada desde backup.'));
+    } else if (reset) {
+      console.log(formatInfo('No habia backup. Configuracion oficial reseteada a max_steps=1000, thinking=true.'));
+    } else {
+      console.log(formatError('No se pudo restaurar la configuracion oficial.'));
+    }
     return;
   }
 

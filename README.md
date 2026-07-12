@@ -115,6 +115,9 @@ kimi1 --thinking on|off (-th)
 kimi1 --enable-kimi (-e)
 kimi1 --disable-kimi (-d)
 
+# Reset official Kimi config if it was modified by earlier installs
+kimi1 --restore-official-config (-roc)
+
 # Migrate official Kimi sessions into kimi1
 kimi1 --migrate-history (-mh)
 

@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const CONFIG = require('./config');
 
 const HOME = os.homedir();
 const KIMI1_SCRIPT = path.resolve(__dirname, '..', 'bin', 'kimi1.js');
@@ -176,22 +177,30 @@ function removeKimiWrapper(profilePath) {
 
 function enableKimiRedirect() {
   setRedirectEnabled(true);
+  // Backup official config before first sync, then copy isolated settings over.
+  const configBackupCreated = CONFIG.backupOfficialConfig();
+  const configSynced = CONFIG.syncOfficialConfigFromIsolated();
   const results = [];
   for (const profilePath of PROFILE_PATHS) {
     const backup = backupProfile(profilePath);
     // Ensure the wrapper is installed and clean (only one block)
     const added = hasKimiWrapper(profilePath) ? false : addKimiWrapper(profilePath);
-    results.push({ profilePath, backup, added });
+    results.push({ profilePath, backup, added, configBackupCreated, configSynced });
   }
   return results;
 }
 
 function disableKimiRedirect() {
   setRedirectEnabled(false);
+  // Restore official Kimi config so direct 'kimi' calls are not affected by
+  // wrapper settings anymore. If no backup exists, reset to sane defaults.
+  const configRestored = CONFIG.restoreOfficialConfig();
+  const configReset = configRestored ? false : CONFIG.resetOfficialConfigToDefaults();
   const results = [];
   for (const profilePath of PROFILE_PATHS) {
     const backup = backupProfile(profilePath);
-    results.push({ profilePath, backup, removed: true });
+    const removed = removeKimiWrapper(profilePath);
+    results.push({ profilePath, backup, removed, configRestored, configReset });
   }
   return results;
 }
