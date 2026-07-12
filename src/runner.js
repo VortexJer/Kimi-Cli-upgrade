@@ -1,12 +1,13 @@
 const { spawn } = require('child_process');
 const path = require('path');
+const fs = require('fs');
 const chalk = require('chalk');
 const CONFIG = require('./config');
 const { buildPrompt } = require('./prompt-builder');
 const { installSkill, removeSkill } = require('./skill-manager');
 const { formatHeader, formatError, formatSuccess, formatInfo, prettyPrint } = require('./formatter');
 const { saveSessionTitleByPrompt } = require('./history');
-const { compactSession, compactLatestSession } = require('./session-compactor');
+const { compactSession: manualCompactSession, compactLatestSession: manualCompactLatestSession } = require('./session-compactor');
 const { getCachedResponse, setCachedResponse } = require('./response-cache');
 
 function ensureKimi1Env() {
@@ -33,19 +34,74 @@ function isContinuation(args) {
          args.includes('-S') || args.includes('--session');
 }
 
-function compactBeforeContinue(args) {
+function findSessionWire(sessionId) {
+  const sessionsDir = path.join(CONFIG.KIMI1_HOME, 'sessions');
+  if (!fs.existsSync(sessionsDir)) return null;
+  const needle = sessionId ? sessionId.replace(/^session_/, '') : null;
+  const wires = [];
+  for (const workspace of fs.readdirSync(sessionsDir, { withFileTypes: true })) {
+    if (!workspace.isDirectory()) continue;
+    const workspacePath = path.join(sessionsDir, workspace.name);
+    for (const session of fs.readdirSync(workspacePath, { withFileTypes: true })) {
+      if (!session.isDirectory()) continue;
+      const sid = session.name;
+      if (needle && !sid.includes(needle)) continue;
+      const wirePath = path.join(workspacePath, sid, 'agents', 'main', 'wire.jsonl');
+      if (fs.existsSync(wirePath)) {
+        wires.push({ sessionId: sid, wirePath, mtime: fs.statSync(wirePath).mtimeMs });
+      }
+    }
+  }
+  if (wires.length === 0) return null;
+  wires.sort((a, b) => b.mtime - a.mtime);
+  return wires[0];
+}
+
+function analyzeWire(wirePath) {
+  if (!fs.existsSync(wirePath)) return { sizeMB: 0, messages: 0 };
+  const sizeMB = fs.statSync(wirePath).size / (1024 * 1024);
+  const raw = fs.readFileSync(wirePath, 'utf-8');
+  const lines = raw.split(/\r?\n/).filter(Boolean);
+  let messages = 0;
+  for (const line of lines) {
+    try {
+      const evt = JSON.parse(line);
+      if (evt.type === 'context.append_message') messages++;
+    } catch {}
+  }
+  return { sizeMB, messages };
+}
+
+function showCompactReminder(args) {
+  const mode = CONFIG.getCompactMode();
+  if (mode === CONFIG.COMPACT_MODES.OFF) return;
+
   const sessionId = getArgValue(args, ['-S', '--session']);
-  let result;
-  if (sessionId) {
-    result = compactSession(sessionId);
-  } else if (args.includes('-c') || args.includes('--continue')) {
-    result = compactLatestSession();
-  }
-  if (result && result.compacted) {
-    console.log(formatInfo(
-      `Session context compacted: ${(result.originalSize / 1024).toFixed(1)} KB -> ${(result.newSize / 1024).toFixed(1)} KB (${result.droppedEvents} events dropped)`
-    ));
-  }
+  const wireInfo = sessionId
+    ? findSessionWire(sessionId)
+    : (args.includes('-c') || args.includes('--continue') ? findSessionWire(null) : null);
+
+  if (!wireInfo) return;
+
+  const thresholds = CONFIG.COMPACT_THRESHOLDS[mode];
+  const stats = analyzeWire(wireInfo.wirePath);
+
+  const sizeExceeded = stats.sizeMB >= thresholds.wireSizeMB;
+  const messagesExceeded = stats.messages >= thresholds.messages;
+
+  if (!sizeExceeded && !messagesExceeded) return;
+
+  console.log(formatInfo(''));
+  console.log(formatInfo('╭─ Session context is getting large ──────────────────────────'));
+  console.log(formatInfo(`│  Mode: ${mode}`));
+  console.log(formatInfo(`│  Size: ${stats.sizeMB.toFixed(2)} MB (threshold: ${thresholds.wireSizeMB} MB)`));
+  console.log(formatInfo(`│  Messages: ${stats.messages} (threshold: ${thresholds.messages})`));
+  console.log(formatInfo('│'));
+  console.log(formatInfo('│  Tip: type /compact inside the chat to summarize old context'));
+  console.log(formatInfo('│       and reduce token usage. You can also run:'));
+  console.log(formatInfo('│       kimi1 --compact-session --id <sessionId>  (expert mode)'));
+  console.log(formatInfo('╰─────────────────────────────────────────────────────────────'));
+  console.log(formatInfo(''));
 }
 
 function runKimi(prompt, sessionId = null) {
@@ -209,14 +265,15 @@ async function launchWithArgs(args, context) {
     await showSplash();
   }
 
+  // Show a reminder if the session context is getting large.
+  // We cannot auto-trigger Kimi's /compact from outside the TUI; the user must
+  // type it inside the interactive session.
+  if (isContinuation(args)) {
+    showCompactReminder(args);
+  }
+
   return new Promise((resolve) => {
     ensureKimi1Env();
-
-    // If the user is continuing a session, aggressively compact old loop events
-    // before the binary loads the wire and starts burning tokens.
-    if (isContinuation(args)) {
-      compactBeforeContinue(args);
-    }
 
     installSkill();
 

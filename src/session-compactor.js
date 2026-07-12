@@ -2,31 +2,6 @@ const fs = require('fs');
 const path = require('path');
 const CONFIG = require('./config');
 
-const AUTO_COMPACT_MARKER = path.join(CONFIG.KIMI1_HOME, '.auto-compact-mode');
-
-function getAutoCompactMode() {
-  if (!fs.existsSync(AUTO_COMPACT_MARKER)) return null;
-  const mode = fs.readFileSync(AUTO_COMPACT_MARKER, 'utf-8').trim();
-  return mode === 'aggressive' ? 'aggressive' : 'safe';
-}
-
-function setAutoCompactMode(mode) {
-  const normalized = ['off', 'aggressive'].includes(mode) ? mode : 'safe';
-  CONFIG.setupKimi1Home();
-  if (normalized === 'off') {
-    try { fs.unlinkSync(AUTO_COMPACT_MARKER); } catch {}
-  } else {
-    fs.writeFileSync(AUTO_COMPACT_MARKER, normalized, 'utf-8');
-  }
-  return normalized;
-}
-
-function autoCompactOpts() {
-  const mode = getAutoCompactMode();
-  if (!mode) return null;
-  return mode === 'aggressive' ? { keepMessages: 10 } : { keepMessages: 30 };
-}
-
 // Safe stripping: only remove fields that are clearly non-semantic metadata.
 // Do NOT remove event types, loop events, or tool schemas — kimi.exe needs them.
 function stripEvent(evt) {
@@ -79,9 +54,8 @@ function findLatestWire(sessionsDir) {
 }
 
 function compactWire(wirePath, opts = {}) {
-  const auto = autoCompactOpts();
-  const threshold = opts.threshold || (auto && auto.threshold) || CONFIG.WIRE_COMPACT_THRESHOLD_BYTES;
-  const keepMessages = opts.keepMessages || (auto && auto.keepMessages) || 30;
+  const threshold = opts.threshold || CONFIG.WIRE_COMPACT_THRESHOLD_BYTES;
+  const keepMessages = opts.keepMessages || 30;
   if (!fs.existsSync(wirePath)) return { compacted: false, reason: 'missing' };
   const size = fs.statSync(wirePath).size;
 
@@ -169,7 +143,5 @@ module.exports = {
   compactSession,
   compactLatestSession,
   compactAllSessions,
-  getAutoCompactMode,
-  setAutoCompactMode,
   stripEvent
 };

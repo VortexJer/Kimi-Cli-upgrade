@@ -190,6 +190,58 @@ function applyMaxStepsToConfig(configPath, n) {
 
 const OFFICIAL_CONFIG_BACKUP = path.join(KIMI1_HOME, 'official-config-backup.toml');
 
+const COMPACT_MODE_MARKER = path.join(KIMI1_HOME, '.compact-reminder-mode');
+
+const COMPACT_MODES = {
+  OFF: 'off',
+  SAFE: 'safe',
+  AGGRESSIVE: 'aggressive'
+};
+
+const COMPACT_THRESHOLDS = {
+  [COMPACT_MODES.SAFE]: { messages: 24, wireSizeMB: 1.0 },
+  [COMPACT_MODES.AGGRESSIVE]: { messages: 12, wireSizeMB: 0.5 }
+};
+
+function getCompactMode() {
+  if (!fs.existsSync(COMPACT_MODE_MARKER)) return COMPACT_MODES.OFF;
+  const mode = fs.readFileSync(COMPACT_MODE_MARKER, 'utf-8').trim();
+  return Object.values(COMPACT_MODES).includes(mode) ? mode : COMPACT_MODES.OFF;
+}
+
+function setCompactMode(mode) {
+  const normalized = Object.values(COMPACT_MODES).includes(mode) ? mode : COMPACT_MODES.OFF;
+  setupKimi1Home();
+  if (normalized === COMPACT_MODES.OFF) {
+    try { fs.unlinkSync(COMPACT_MODE_MARKER); } catch {}
+  } else {
+    fs.writeFileSync(COMPACT_MODE_MARKER, normalized, 'utf-8');
+  }
+  return normalized;
+}
+
+function shouldCompact(wirePath) {
+  const mode = getCompactMode();
+  if (mode === COMPACT_MODES.OFF) return false;
+  if (!fs.existsSync(wirePath)) return false;
+
+  const thresholds = COMPACT_THRESHOLDS[mode];
+  const sizeMB = fs.statSync(wirePath).size / (1024 * 1024);
+  if (sizeMB >= thresholds.wireSizeMB) return true;
+
+  // Count user+assistant messages
+  const raw = fs.readFileSync(wirePath, 'utf-8');
+  const lines = raw.split(/\r?\n/).filter(Boolean);
+  let messageCount = 0;
+  for (const line of lines) {
+    try {
+      const evt = JSON.parse(line);
+      if (evt.type === 'context.append_message') messageCount++;
+    } catch {}
+  }
+  return messageCount >= thresholds.messages;
+}
+
 function backupOfficialConfig() {
   const officialConfigPath = path.join(KIMI_HOME, 'config.toml');
   if (!fs.existsSync(officialConfigPath)) return false;
@@ -288,6 +340,11 @@ const CONFIG = {
   restoreOfficialConfig,
   syncOfficialConfigFromIsolated,
   resetOfficialConfigToDefaults,
+  COMPACT_MODES,
+  COMPACT_THRESHOLDS,
+  getCompactMode,
+  setCompactMode,
+  shouldCompact,
   PROJECT_DIR: path.join(HOME, 'kimi-cli-upgrade'),
   MAX_RETRIES: 3,
   MAX_CONTINUATIONS: 5,

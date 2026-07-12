@@ -8,7 +8,7 @@ const { buildPrompt } = require('./prompt-builder');
 const { uninstall } = require('./uninstall');
 const { listHistory, showSessionDetail, resumeSessionInteractive, cleanEmptySessions, renameAllSessions } = require('./history');
 const { migrateOfficialSessions } = require('./session-migrator');
-const { compactSession, compactLatestSession, compactAllSessions, setAutoCompactMode, getAutoCompactMode } = require('./session-compactor');
+const { compactSession, compactLatestSession, compactAllSessions } = require('./session-compactor');
 const { enableKimiRedirect, disableKimiRedirect } = require('./profile-manager');
 const { formatHeader, formatInfo, formatSuccess, createTable } = require('./formatter');
 const { showMenu } = require('./menu');
@@ -39,8 +39,8 @@ const SHORT_FLAGS = {
   '-nc': '--no-context',
   '-f': '--fix',
   '-mh': '--migrate-history',
-  '-cs': '--compact-session',
-  '-ac': '--auto-compact'
+  '-cm': '--compact-mode',
+  '-cs': '--compact-session'
 };
 
 function normalizeArgs(args) {
@@ -61,9 +61,14 @@ function showHelp() {
   console.log('kimi1 --history --resume <id> (-r)');
   console.log('kimi1 --clean-empty (-ce)');
   console.log('kimi1 --rename-sessions (-rs)');
-  console.log('kimi1 --compact-session (-cs) [--id <id>] [--aggressive] (aggressive can break resume)');
-  console.log('kimi1 --auto-compact [safe|aggressive|off] (-ac)  default: off (recommended)');
   console.log('kimi1 --migrate-history (-mh)');
+  console.log('');
+  console.log('Context compaction reminder (type /compact inside the chat yourself):');
+  console.log('kimi1 --compact-mode off|safe|aggressive (-cm)  default: off');
+  console.log('  off       = no reminder');
+  console.log('  safe      = remind when >24 messages or wire >1 MB');
+  console.log('  aggressive= remind when >12 messages or wire >500 KB');
+  console.log('(expert/dangerous) kimi1 --compact-session (-cs) [--id <id>] [--aggressive]');
   console.log('');
   console.log('kimi1 --enable-kimi (-e)          redirect "kimi" -> "kimi1"');
   console.log('kimi1 --disable-kimi (-d)         restore original "kimi"');
@@ -267,7 +272,29 @@ async function main() {
     return;
   }
 
+  if (args.includes('--compact-mode')) {
+    const val = getArgValue(args, ['--compact-mode']);
+    if (val && ['safe', 'aggressive', 'off'].includes(val.toLowerCase())) {
+      const mode = CONFIG.setCompactMode(val.toLowerCase());
+      console.log(formatSuccess(`Compact reminder mode set to ${mode}`));
+    } else {
+      const current = CONFIG.getCompactMode();
+      const compactOptions = [
+        'off        - no reminder (default)',
+        'safe       - remind at >24 messages or wire >1 MB',
+        'aggressive - remind at >12 messages or wire >500 KB'
+      ];
+      const defaultIdx = current === 'aggressive' ? 2 : (current === 'safe' ? 1 : 0);
+      const selected = await showMenu('Choose compact reminder mode (reminds you to type /compact inside the chat):', compactOptions, defaultIdx);
+      const mode = selected === 2 ? 'aggressive' : (selected === 1 ? 'safe' : 'off');
+      CONFIG.setCompactMode(mode);
+      console.log(formatSuccess(`Compact reminder mode set to ${mode}`));
+    }
+    return;
+  }
+
   if (args.includes('--compact-session')) {
+    console.log(formatError('WARNING: --compact-session uses manual wire.jsonl stripping and can break session resume.'));
     const idIndex = args.indexOf('--id');
     const aggressive = args.includes('--aggressive');
     const opts = aggressive ? { keepMessages: 10 } : {};
@@ -285,27 +312,6 @@ async function main() {
       console.log(formatInfo(`Backup: ${result.backup}`));
     } else {
       console.log(formatInfo(`No compaction needed: ${result.reason}`));
-    }
-    return;
-  }
-
-  if (args.includes('--auto-compact')) {
-    const val = getArgValue(args, ['--auto-compact']);
-    if (val && ['safe', 'aggressive', 'off'].includes(val.toLowerCase())) {
-      const mode = setAutoCompactMode(val.toLowerCase());
-      console.log(formatSuccess(`Auto-compaction set to ${mode}`));
-    } else {
-      const current = getAutoCompactMode() || 'off';
-      const compactOptions = [
-        'safe       - keep last 30 messages (recommended)',
-        'aggressive - keep last 10 messages (more savings, more risk)',
-        'off        - do not auto-compact'
-      ];
-      const defaultIdx = current === 'aggressive' ? 1 : (current === 'off' ? 2 : 0);
-      const selected = await showMenu('Choose automatic session compaction:', compactOptions, defaultIdx);
-      const mode = selected === 1 ? 'aggressive' : (selected === 2 ? 'off' : 'safe');
-      setAutoCompactMode(mode);
-      console.log(formatSuccess(`Auto-compaction set to ${mode}`));
     }
     return;
   }
@@ -345,8 +351,9 @@ async function main() {
   if (sessionId) {
     const workDir = findSessionWorkDir(sessionId) || process.cwd();
     const context = loadContext(workDir);
-    const remainingArgs = removeKnownFlags(args, ['-S', '--session']);
-    await launchWithArgs(remainingArgs, context);
+    // Keep -S and the session ID in the args passed to Kimi; we only extracted
+    // the ID to load the right local context and optional compact reminder.
+    await launchWithArgs(args, context);
     return;
   }
 

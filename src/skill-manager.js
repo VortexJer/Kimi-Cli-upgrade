@@ -12,6 +12,7 @@ const SKILL_RULES = `
 - Output only code, commands, file paths, tables, or concise technical facts.
 - No greetings, introductions, apologies, or closing remarks.
 - If a terminal command fails, show only the last 20 relevant lines or key stack trace.
+- If the conversation history grows beyond ~50 turns or the session feels slow, proactively run "/compact" to summarize old context and reduce token usage.
 `.trim();
 
 function ensureDir(dir) {

@@ -101,21 +101,20 @@ $thinkingValue = if ($thinkingIndex -eq 1) { "true" } else { "false" }
 Write-Host "Setting thinking.enabled to $thinkingValue..." -ForegroundColor Cyan
 & node "$kimi1Script" --thinking $thinkingValue
 
-# Ask for automatic session compaction preference with arrow-key menu
-Write-Host "WARNING: auto-compaction can break session resume if too aggressive." -ForegroundColor Yellow
+# Ask for compact reminder preference with arrow-key menu
 $compactOptions = @(
-    "off       - do not auto-compact (recommended, safest)",
-    "safe      - keep last 30 messages (experimental)",
-    "aggressive- keep last 10 messages (high risk)"
+    "off        - no reminder (default, safest)",
+    "safe       - remind at >24 messages or wire >1 MB",
+    "aggressive - remind at >12 messages or wire >500 KB"
 )
-$compactIndex = Show-Menu -Title "Choose automatic session compaction:" -Options $compactOptions -DefaultIndex 0
+$compactIndex = Show-Menu -Title "Choose compact reminder mode (reminds you to type /compact inside the chat):" -Options $compactOptions -DefaultIndex 0
 $compactMode = switch ($compactIndex) {
     1 { "safe" }
     2 { "aggressive" }
     default { "off" }
 }
-Write-Host "Setting auto-compaction to $compactMode..." -ForegroundColor Cyan
-& node "$kimi1Script" --auto-compact $compactMode
+Write-Host "Setting compact reminder mode to $compactMode..." -ForegroundColor Cyan
+& node "$kimi1Script" --compact-mode $compactMode
 
 # Activate the PowerShell redirect via the wrapper itself
 Write-Host "Activating 'kimi' -> 'kimi1' redirect..." -ForegroundColor Cyan

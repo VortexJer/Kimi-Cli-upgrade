@@ -19,7 +19,7 @@ A local wrapper for the official [Kimi Code CLI](https://moonshotai.github.io/ki
 - **Optional `kimi` redirect**: After installation, `kimi` is fully redirected to `kimi1`; disable anytime.
 - **Token-saving flags**: `--compress`, `--cache`, `--no-context`, `--fix`.
 - **Session migration**: `--migrate-history` imports official Kimi sessions on first install.
-- **Session compaction (opt-in)**: `--compact-session` strips timestamps, IDs, and message metadata from `wire.jsonl`. Loop events are preserved to avoid breaking session resume. Auto-compaction is **off** by default.
+- **Compact reminder (opt-in)**: `--compact-mode` warns you before opening a large session so you can type Kimi's official `/compact` slash command inside the chat. Auto-compaction is **off** by default because `/compact` only works interactively.
 - **Visual formatting**: Colored output and clean tables via `chalk` and `cli-table3`.
 
 ## Requirements
@@ -89,14 +89,13 @@ kimi1 --clean-empty (-ce)
 # Rename old sessions based on the first prompt (heuristic pattern rules)
 kimi1 --rename-sessions (-rs)
 
-# Compact a session's wire.jsonl metadata (latest session or by ID)
-# WARNING: aggressive mode can break session resume.
+# Compact reminder: warn before opening large sessions (default: off)
+kimi1 --compact-mode off|safe|aggressive (-cm)
+
+# Manual metadata stripping (expert/dangerous, can break session resume)
 kimi1 --compact-session (-cs)
 kimi1 --compact-session --id <id> (-cs -id)
 kimi1 --compact-session --aggressive  # keep only last 10 messages (high risk)
-
-# Enable/disable automatic compaction on session resume (default: off, recommended)
-kimi1 --auto-compact safe|aggressive|off (-ac)
 
 # Dry-run without calling the API
 kimi1 --dry-run (-dr) "your prompt"
@@ -167,7 +166,7 @@ Restart PowerShell after enabling/disabling.
 | Thinking off by default | Disables reasoning chain, saving tokens on every call |
 | Per-turn step cap handling | Auto-resume on `max_steps_exceeded`; large tasks continue across turns |
 | History cap | Only the 3 most relevant prior messages are kept in wrapper context |
-| Session compaction | `wire.jsonl` metadata stripped (timestamps, IDs); loop events preserved |
+| Compact reminder | Warns before opening large sessions so you can run Kimi's official `/compact` |
 | Tool avoidance rule | System prompt forbids tool calls for simple questions/greetings |
 | Context minification | Local whitespace/newline compression of context files before injection |
 | Relevance pruning | Only history messages sharing keywords with the current prompt are kept |
