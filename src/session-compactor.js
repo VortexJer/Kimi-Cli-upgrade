@@ -11,9 +11,13 @@ function getAutoCompactMode() {
 }
 
 function setAutoCompactMode(mode) {
-  const normalized = mode === 'aggressive' ? 'aggressive' : 'safe';
+  const normalized = ['off', 'aggressive'].includes(mode) ? mode : 'safe';
   CONFIG.setupKimi1Home();
-  fs.writeFileSync(AUTO_COMPACT_MARKER, normalized, 'utf-8');
+  if (normalized === 'off') {
+    try { fs.unlinkSync(AUTO_COMPACT_MARKER); } catch {}
+  } else {
+    fs.writeFileSync(AUTO_COMPACT_MARKER, normalized, 'utf-8');
+  }
   return normalized;
 }
 
@@ -23,21 +27,8 @@ function autoCompactOpts() {
   return mode === 'aggressive' ? { keepMessages: 10 } : { keepMessages: 30 };
 }
 
-// Event types worth keeping when compacting a session wire.
-// Everything else (loop events, usage records, permission prompts) is discarded.
-const KEEP_EVENT_TYPES = new Set([
-  'metadata',
-  'config.update',
-  'tools.set_active_tools',
-  'llm.tools_snapshot',
-  'context.append_message',
-  'context.apply_compaction',
-  'full_compaction.begin',
-  'full_compaction.complete',
-  'turn.cancel'
-]);
-
-// Fields to strip from kept events to reduce size without breaking the wire format.
+// Safe stripping: only remove fields that are clearly non-semantic metadata.
+// Do NOT remove event types, loop events, or tool schemas — kimi.exe needs them.
 function stripEvent(evt) {
   if (!evt || typeof evt !== 'object') return evt;
 
@@ -47,36 +38,11 @@ function stripEvent(evt) {
   delete evt.event_id;
   delete evt.eventId;
   delete evt.request_id;
-  delete evt.turnId;
-  delete evt.stepId;
 
   // Strip message metadata that does not affect context semantics.
   if (evt.type === 'context.append_message' && evt.message) {
     delete evt.message.name;
     delete evt.message.origin;
-    if (Array.isArray(evt.message.content)) {
-      evt.message.content = evt.message.content.map(part => {
-        if (part && typeof part === 'object') {
-          const clean = { type: part.type };
-          if (part.text !== undefined) clean.text = part.text;
-          if (part.toolUseId !== undefined) clean.toolUseId = part.toolUseId;
-          if (part.toolCallId !== undefined) clean.toolCallId = part.toolCallId;
-          if (part.content !== undefined) clean.content = part.content;
-          if (part.input !== undefined) clean.input = part.input;
-          return clean;
-        }
-        return part;
-      });
-    }
-    delete evt.message.toolCalls;
-  }
-
-  // Strip large snapshots down to tool names only.
-  if (evt.type === 'llm.tools_snapshot' && Array.isArray(evt.tools)) {
-    evt.tools = evt.tools.map(t => ({
-      name: t.name,
-      description: t.description ? t.description.slice(0, 120) : undefined
-    })).filter(t => t.name);
   }
 
   return evt;
@@ -140,16 +106,13 @@ function compactWire(wirePath, opts = {}) {
   for (let i = 0; i < lines.length; i++) {
     try {
       const evt = JSON.parse(lines[i]);
-      if (KEEP_EVENT_TYPES.has(evt.type)) {
-        if (evt.type === 'context.append_message' && i < keepFrom) continue;
-        kept.push(JSON.stringify(stripEvent(evt)));
-      }
+      if (evt.type === 'context.append_message' && i < keepFrom) continue;
+      kept.push(JSON.stringify(stripEvent(evt)));
     } catch {
       // drop malformed
     }
   }
 
-  // Always rewrite if we dropped anything, even under threshold.
   const newRaw = kept.join('\n') + (kept.length ? '\n' : '');
   const wouldShrink = newRaw.length < raw.length;
 
@@ -208,6 +171,5 @@ module.exports = {
   compactAllSessions,
   getAutoCompactMode,
   setAutoCompactMode,
-  KEEP_EVENT_TYPES,
   stripEvent
 };

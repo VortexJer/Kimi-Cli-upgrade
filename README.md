@@ -19,7 +19,7 @@ A local wrapper for the official [Kimi Code CLI](https://moonshotai.github.io/ki
 - **Optional `kimi` redirect**: After installation, `kimi` is fully redirected to `kimi1`; disable anytime.
 - **Token-saving flags**: `--compress`, `--cache`, `--no-context`, `--fix`.
 - **Session migration**: `--migrate-history` imports official Kimi sessions on first install.
-- **Session compaction**: `--compact-session` shrinks `wire.jsonl` by stripping loop noise, timestamps, IDs, and old messages.
+- **Session compaction**: `--compact-session` strips timestamps, IDs, and message metadata from `wire.jsonl`. Loop events are preserved to avoid breaking session resume.
 - **Visual formatting**: Colored output and clean tables via `chalk` and `cli-table3`.
 
 ## Requirements
@@ -37,7 +37,7 @@ cd kimi-cli-upgrade
 .\install.ps1
 ```
 
-During installation you will pick `max_steps_per_turn`, `thinking` mode, and `auto-compact` mode from arrow-key menus (Up/Down + Enter). Restart PowerShell. The installer creates both `kimi1` and a hybrid `kimi` wrapper, so most kimi1 commands are also available through the official `kimi` command:
+During installation you will pick `max_steps_per_turn`, `thinking` mode, and `auto-compact` mode (default: off) from arrow-key menus (Up/Down + Enter). Restart PowerShell. The installer creates both `kimi1` and a hybrid `kimi` wrapper, so most kimi1 commands are also available through the official `kimi` command:
 
 ```powershell
 kimi1 --help
@@ -89,12 +89,13 @@ kimi1 --clean-empty (-ce)
 # Rename old sessions based on the first prompt (heuristic pattern rules)
 kimi1 --rename-sessions (-rs)
 
-# Compact a session's wire.jsonl (latest session or by ID)
+# Compact a session's wire.jsonl metadata (latest session or by ID)
+# WARNING: aggressive mode can break session resume.
 kimi1 --compact-session (-cs)
 kimi1 --compact-session --id <id> (-cs -id)
-kimi1 --compact-session --aggressive  # keep only last 10 messages
+kimi1 --compact-session --aggressive  # keep only last 10 messages (high risk)
 
-# Enable/disable automatic compaction on session resume (interactive menu if no value)
+# Enable/disable automatic compaction on session resume (default: off)
 kimi1 --auto-compact safe|aggressive|off (-ac)
 
 # Dry-run without calling the API
@@ -163,7 +164,7 @@ Restart PowerShell after enabling/disabling.
 | Thinking off by default | Disables reasoning chain, saving tokens on every call |
 | Per-turn step cap handling | Auto-resume on `max_steps_exceeded`; large tasks continue across turns |
 | History cap | Only the 3 most relevant prior messages are kept in wrapper context |
-| Session compaction | `wire.jsonl` stripped of loop noise, timestamps, IDs; old messages dropped |
+| Session compaction | `wire.jsonl` metadata stripped (timestamps, IDs); loop events preserved |
 | Tool avoidance rule | System prompt forbids tool calls for simple questions/greetings |
 | Context minification | Local whitespace/newline compression of context files before injection |
 | Relevance pruning | Only history messages sharing keywords with the current prompt are kept |

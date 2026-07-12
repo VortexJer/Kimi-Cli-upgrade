@@ -102,16 +102,17 @@ Write-Host "Setting thinking.enabled to $thinkingValue..." -ForegroundColor Cyan
 & node "$kimi1Script" --thinking $thinkingValue
 
 # Ask for automatic session compaction preference with arrow-key menu
+Write-Host "WARNING: auto-compaction can break session resume if too aggressive." -ForegroundColor Yellow
 $compactOptions = @(
-    "safe       - keep last 30 messages (recommended)",
-    "aggressive - keep last 10 messages (more savings, more risk)",
-    "off        - do not auto-compact"
+    "off       - do not auto-compact (recommended, safest)",
+    "safe      - keep last 30 messages (experimental)",
+    "aggressive- keep last 10 messages (high risk)"
 )
 $compactIndex = Show-Menu -Title "Choose automatic session compaction:" -Options $compactOptions -DefaultIndex 0
 $compactMode = switch ($compactIndex) {
-    1 { "aggressive" }
-    2 { "off" }
-    default { "safe" }
+    1 { "safe" }
+    2 { "aggressive" }
+    default { "off" }
 }
 Write-Host "Setting auto-compaction to $compactMode..." -ForegroundColor Cyan
 & node "$kimi1Script" --auto-compact $compactMode

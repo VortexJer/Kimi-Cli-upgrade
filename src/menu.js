@@ -3,6 +3,12 @@ const chalk = require('chalk');
 
 function showMenu(title, options, defaultIndex = 0) {
   return new Promise((resolve) => {
+    if (!process.stdin.isTTY) {
+      console.log(chalk.gray(`${title} (non-interactive, using default)`));
+      resolve(defaultIndex);
+      return;
+    }
+
     let selected = defaultIndex;
 
     function render() {
