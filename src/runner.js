@@ -1,5 +1,6 @@
 const { spawn } = require('child_process');
 const path = require('path');
+const chalk = require('chalk');
 const CONFIG = require('./config');
 const { buildPrompt } = require('./prompt-builder');
 const { installSkill, removeSkill } = require('./skill-manager');
@@ -150,7 +151,28 @@ async function runWithAutoFix(userPrompt, context, options = {}) {
   saveSessionTitleByPrompt(userPrompt, process.cwd());
 }
 
-function launchWithArgs(args, context) {
+function showSplash() {
+  return new Promise(resolve => {
+    console.clear();
+    console.log('\n\n');
+    console.log(chalk.cyan.bold('  ╔═══════════════════════════════════════════╗'));
+    console.log(chalk.cyan.bold('  ║                                           ║'));
+    console.log(chalk.cyan.bold('  ║         K I M I 1   A C T I V E           ║'));
+    console.log(chalk.cyan.bold('  ║                                           ║'));
+    console.log(chalk.cyan.bold('  ╚═══════════════════════════════════════════╝'));
+    console.log('\n');
+    setTimeout(() => {
+      console.clear();
+      resolve();
+    }, 1000);
+  });
+}
+
+async function launchWithArgs(args, context) {
+  if (args.length === 0) {
+    await showSplash();
+  }
+
   return new Promise((resolve) => {
     ensureKimi1Env();
 
