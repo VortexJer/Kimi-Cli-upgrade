@@ -14,6 +14,7 @@ A local wrapper for the official [Kimi Code CLI](https://moonshotai.github.io/ki
 - **Auto-generated session names (0 tokens)**: old sessions are renamed locally from the first user prompt using pattern rules + keyword extraction. No API calls.
 - **Isolated home**: `kimi1` runs under its own `~/.kimi-code-kimi1` directory, leaving the official `~/.kimi-code` untouched.
 - **Loop control**: Configurable `max_steps_per_turn` and `thinking` toggle to cut token usage.
+- **Thinking off by default**: Disables Kimi's reasoning chain to reduce per-call token cost (re-enable anytime).
 - **Auto-continuation**: When Kimi hits its per-turn `max_steps` cap, `kimi1` automatically resumes the same session and continues the task.
 - **Optional `kimi` redirect**: After installation, `kimi` is fully redirected to `kimi1`; disable anytime.
 - **Token-saving flags**: `--compress`, `--cache`, `--no-context`, `--fix`.
@@ -35,7 +36,7 @@ cd kimi-cli-upgrade
 .\install.ps1
 ```
 
-During installation you will be asked for `max_steps_per_turn`; press ENTER to leave it unlimited. Restart PowerShell. The installer creates both `kimi1` and a hybrid `kimi` wrapper, so most kimi1 commands are also available through the official `kimi` command:
+During installation you will be asked for `max_steps_per_turn` (press ENTER for unlimited) and for `thinking` mode (press ENTER for off). Restart PowerShell. The installer creates both `kimi1` and a hybrid `kimi` wrapper, so most kimi1 commands are also available through the official `kimi` command:
 
 ```powershell
 kimi1 --help
@@ -150,7 +151,10 @@ Restart PowerShell after enabling/disabling.
 |-----------|----------------------|
 | Zero-token titles | Session names extracted locally with pattern rules + keyword extraction |
 | Single-shot auto-fix | At most 2 Kimi calls: initial + one correction, not a loop |
+| Thinking off by default | Disables reasoning chain, saving tokens on every call |
 | Per-turn step cap handling | Auto-resume on `max_steps_exceeded`; large tasks continue across turns |
+| History cap | Only the 3 most relevant prior messages are kept in wrapper context |
+| Tool avoidance rule | System prompt forbids tool calls for simple questions/greetings |
 | Context minification | Local whitespace/newline compression of context files before injection |
 | Relevance pruning | Only history messages sharing keywords with the current prompt are kept |
 | Payload guard | System prompt forbids reading binary/multimedia/dependency bytes |

@@ -7,35 +7,36 @@ function maxStepsRule() {
 }
 
 const STRICT_NO_VERBIAGE = `
-STRICT OUTPUT RULES (token saving):
-- No greetings, introductions, apologies, or closing remarks.
-- No explanations unless explicitly requested.
-- Output only: code, commands, file paths, tables, or concise technical facts.
-- Use minimal words. Prefer bullet points and tables over paragraphs.
-- If you must explain, keep it under one sentence.
+TERSE OUTPUT:
+- No greetings, apologies, explanations, or filler.
+- Output only code, commands, paths, tables, or concise technical facts.
+- Use bullets/tables, not paragraphs.
 `.trim();
 
 const BINARY_GUARD = `
 PAYLOAD GUARD:
-- NEVER read the internal bytes of binary/multimedia files.
-- Blocked extensions: .png .jpg .jpeg .gif .bmp .webp .ico .mp4 .mov .avi .mkv .mp3 .wav .exe .dll .zip .rar .7z .pdf .doc .docx.
-- If you need to reference these files, use ONLY their name and extension.
-- NEVER index or search inside node_modules, .git, or dependency folders; list filenames only when necessary.
+- NEVER read bytes of binary/media files (.png,.jpg,.mp4,.exe,.zip,.pdf,etc).
+- NEVER index inside node_modules,.git,dependency folders.
+- Reference blocked files by name+extension only.
 `.trim();
 
 const COMPRESSED_CODE_RULE = `
-CODE TRANSMISSION FORMAT:
-- Return code blocks in the most compact form possible: minimal whitespace, no decorative blank lines, no trailing spaces.
-- Remove redundant indentation in transmitted code blocks.
-- Do not minify to the point of being unreadable; just avoid decorative spacing.
+CODE FORMAT:
+- Compact code blocks: no decorative blank lines or trailing spaces.
+- Keep readability; do not minify symbols.
+`.trim();
+
+const TOOL_AVOIDANCE = `
+TOOL USE:
+- Do NOT call tools for simple questions, greetings, or explanations.
+- Use tools ONLY when you must read files or run commands to answer.
+- Batch multiple file reads into one shell command when possible.
 `.trim();
 
 const AUTO_FIX_PERSONA = `
 MODE: AUTO-CORRECTION.
-- Analyze the error below with maximum precision.
-- Propose the minimal fix.
-- Output only the corrected command, code block, or exact file change.
-- Do not add commentary.
+- Minimal fix only.
+- Output corrected command/code; no commentary.
 `.trim();
 
 const STOP_WORDS = new Set([
@@ -108,6 +109,7 @@ function buildPrompt(userPrompt, context, options = {}) {
   parts.push(STRICT_NO_VERBIAGE);
   parts.push(BINARY_GUARD);
   parts.push(COMPRESSED_CODE_RULE);
+  parts.push(TOOL_AVOIDANCE);
   parts.push(maxStepsRule());
   if (autoFix) {
     parts.push(AUTO_FIX_PERSONA);
@@ -122,8 +124,8 @@ function buildPrompt(userPrompt, context, options = {}) {
     parts.push('</contexto_estatico>');
   }
 
-  // 3. Filtered session history (metadata stripped)
-  const relevantHistory = filterHistoryByRelevance(cleanHistory(history), userPrompt);
+  // 3. Filtered session history (metadata stripped), capped to save tokens
+  const relevantHistory = filterHistoryByRelevance(cleanHistory(history), userPrompt).slice(-3);
   if (relevantHistory.length > 0) {
     parts.push('<historial_relevante>');
     for (const msg of relevantHistory) {

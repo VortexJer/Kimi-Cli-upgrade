@@ -49,6 +49,21 @@ if (-not [string]::IsNullOrWhiteSpace($stepsInput)) {
 Write-Host "Setting max_steps_per_turn to $stepsValue..." -ForegroundColor Cyan
 & node "$kimi1Script" --max-steps $stepsValue
 
+# Ask for thinking preference
+Write-Host "`nConfigure thinking mode:" -ForegroundColor Cyan
+Write-Host "  ON  = Kimi shows its reasoning chain (better quality, more tokens)." -ForegroundColor Gray
+Write-Host "  OFF = Kimi answers directly (fewer tokens, faster)." -ForegroundColor Gray
+$thinkingInput = Read-Host "Enable thinking? (y/N, default: N)"
+$thinkingValue = "false"
+if (-not [string]::IsNullOrWhiteSpace($thinkingInput)) {
+    if ($thinkingInput -match '^[yY]') {
+        $thinkingValue = "true"
+    }
+}
+
+Write-Host "Setting thinking.enabled to $thinkingValue..." -ForegroundColor Cyan
+& node "$kimi1Script" --thinking $thinkingValue
+
 # Activate the PowerShell redirect via the wrapper itself
 Write-Host "Activating 'kimi' -> 'kimi1' redirect..." -ForegroundColor Cyan
 & node "$kimi1Script" --enable-kimi

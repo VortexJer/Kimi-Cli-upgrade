@@ -102,6 +102,20 @@ function setupKimi1Home() {
     fs.writeFileSync(dstConfig, toml, 'utf-8');
   }
 
+  // thinking: default to off to save tokens; user can re-enable with --thinking on.
+  // Only apply the default once via a marker so explicit user changes are preserved.
+  const thinkingMarker = path.join(KIMI1_HOME, '.thinking-default-set');
+  if (!fs.existsSync(thinkingMarker)) {
+    let isolatedToml = fs.readFileSync(dstConfig, 'utf-8');
+    if (!/^\[thinking\]$/m.test(isolatedToml)) {
+      isolatedToml += '\n[thinking]\nenabled = false\n';
+    } else {
+      isolatedToml = isolatedToml.replace(/^enabled\s*=\s*\S.*$/m, 'enabled = false');
+    }
+    fs.writeFileSync(dstConfig, isolatedToml, 'utf-8');
+    fs.writeFileSync(thinkingMarker, '1', 'utf-8');
+  }
+
   // tui.toml: keep UI settings consistent
   const srcTui = path.join(KIMI_HOME, 'tui.toml');
   const dstTui = path.join(KIMI1_HOME, 'tui.toml');
@@ -178,9 +192,9 @@ function setMaxSteps(value) {
 
 function getThinking() {
   const toml = readIsolatedConfig();
-  if (!toml) return true;
+  if (!toml) return false;
   const match = toml.match(/^enabled\s*=\s*(true|false)/m);
-  return match ? match[1] === 'true' : true;
+  return match ? match[1] === 'true' : false;
 }
 
 function setThinking(value) {
