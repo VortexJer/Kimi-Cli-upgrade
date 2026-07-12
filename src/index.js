@@ -12,6 +12,8 @@ const { compactSession, compactLatestSession, compactAllSessions } = require('./
 const { enableKimiRedirect, disableKimiRedirect } = require('./profile-manager');
 const { formatHeader, formatInfo, formatSuccess, createTable } = require('./formatter');
 const { showMenu } = require('./menu');
+const { likelyNeedsTools } = require('./prompt-classifier');
+const { estimateTokens, formatTokenCount } = require('./token-estimator');
 
 const SESSION_INDEX = path.join(CONFIG.KIMI1_HOME, 'session_index.jsonl');
 
@@ -371,8 +373,13 @@ async function main() {
     const userPrompt = filteredArgs.join(' ');
     const cwd = process.cwd();
     const context = noContext ? {} : loadContext(cwd);
+    const needsTools = likelyNeedsTools(userPrompt);
+    const built = buildPrompt(userPrompt, context, { compress });
+    const contextTokens = estimateTokens(Object.values(context).join('\n'));
+    const promptTokens = estimateTokens(built);
     console.log(formatHeader('DRY RUN - Prompt que se enviaria a Kimi'));
-    console.log(buildPrompt(userPrompt, context, { compress }));
+    console.log(formatInfo(`Mode: ${needsTools ? 'tools' : 'chat'} | Context files: ${formatTokenCount(contextTokens)} tokens | Total prompt: ${formatTokenCount(promptTokens)} tokens`));
+    console.log(built);
     return;
   }
 

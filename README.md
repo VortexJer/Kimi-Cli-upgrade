@@ -7,6 +7,7 @@ A local wrapper for the official [Kimi Code CLI](https://moonshotai.github.io/ki
 ## Features
 
 - **Local context injection (prompt mode only)**: Auto-loads `KIMI.md`, `.ai-shared-context.md`, and `.globalcontext.md` from the current directory and sends them inside the `-p` prompt.
+- **Prompt pre-classification**: In prompt mode, `kimi1` heuristically detects whether the user is asking a question or requesting file/tool actions. If no tools are needed, it installs a shorter conversational skill and omits tool-use rules from the system prompt.
 - **Strict no-verbiage**: Forces concise, technical-only responses.
 - **Single-shot auto-correction**: On terminal errors, packages the error + previous output into one final correction prompt instead of looping.
 - **Arrow-key session selector**: `kimi1 --history` opens a Claude-style interactive picker (Up/Down, Enter, Esc).
@@ -166,6 +167,8 @@ Restart PowerShell after enabling/disabling.
 | Thinking off by default | Disables reasoning chain, saving tokens on every call |
 | Per-turn step cap handling | Auto-resume on `max_steps_exceeded`; large tasks continue across turns |
 | History cap | Only the 3 most relevant prior messages are kept in wrapper context |
+| Prompt pre-classification | Detects conversational prompts and uses a shorter chat-mode skill without tool rules |
+| Token estimator | `--dry-run` shows estimated prompt/context tokens before calling the API |
 | Compact reminder | Warns before opening large sessions so you can run Kimi's official `/compact` |
 | Tool avoidance rule | System prompt forbids tool calls for simple questions/greetings |
 | Context minification | Local whitespace/newline compression of context files before injection |

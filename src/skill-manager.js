@@ -6,13 +6,18 @@ const SKILL_NAME = 'kimi1-local-context';
 const SKILL_DIR = path.join(CONFIG.KIMI1_HOME, 'skills', SKILL_NAME);
 const SKILL_PATH = path.join(SKILL_DIR, 'SKILL.md');
 
-const SKILL_RULES = `
+const BASE_RULES = `
 # Kimi1 Skill Rules
 
 - Output only code, commands, file paths, tables, or concise technical facts.
 - No greetings, introductions, apologies, or closing remarks.
-- If a terminal command fails, show only the last 20 relevant lines or key stack trace.
 - If the conversation history grows beyond ~50 turns or the session feels slow, proactively run "/compact" to summarize old context and reduce token usage.
+`.trim();
+
+const TOOL_RULES = `
+- If a terminal command fails, show only the last 20 relevant lines or key stack trace.
+- Batch multiple file reads or shell commands into a single tool call when possible.
+- Do NOT call tools for simple questions, greetings, or explanations.
 `.trim();
 
 function ensureDir(dir) {
@@ -21,19 +26,25 @@ function ensureDir(dir) {
   }
 }
 
-function installSkill() {
-  ensureDir(SKILL_DIR);
-
+function buildSkillContent(needsTools) {
   const parts = [
     '---',
     `name: ${SKILL_NAME}`,
-    'description: Reglas operativas minimas inyectadas por kimi1.',
+    `description: Reglas operativas minimas inyectadas por kimi1 (${needsTools ? 'tool mode' : 'chat mode'}).`,
     '---',
     '',
-    SKILL_RULES
+    BASE_RULES
   ];
+  if (needsTools) {
+    parts.push('');
+    parts.push(TOOL_RULES);
+  }
+  return parts.join('\n');
+}
 
-  fs.writeFileSync(SKILL_PATH, parts.join('\n'), 'utf-8');
+function installSkill({ needsTools = true } = {}) {
+  ensureDir(SKILL_DIR);
+  fs.writeFileSync(SKILL_PATH, buildSkillContent(needsTools), 'utf-8');
   return SKILL_PATH;
 }
 

@@ -7,6 +7,8 @@ const { buildPrompt } = require('./prompt-builder');
 const { installSkill, removeSkill } = require('./skill-manager');
 const { formatHeader, formatError, formatSuccess, formatInfo, prettyPrint } = require('./formatter');
 const { saveSessionTitleByPrompt } = require('./history');
+const { likelyNeedsTools } = require('./prompt-classifier');
+const { estimateTokens, formatTokenCount } = require('./token-estimator');
 const { compactSession: manualCompactSession, compactLatestSession: manualCompactLatestSession } = require('./session-compactor');
 const { getCachedResponse, setCachedResponse } = require('./response-cache');
 
@@ -150,7 +152,15 @@ const CONTINUE_PROMPT = `The previous turn hit the max_steps_per_turn limit. Con
 async function runWithAutoFix(userPrompt, context, options = {}) {
   const { fix = false, compress = false, cache = false } = options;
 
+  const needsTools = likelyNeedsTools(userPrompt);
+  const promptTokens = estimateTokens(buildPrompt(userPrompt, context, { compress: compress || false }));
+  const contextTokens = estimateTokens(Object.values(context).join('\n'));
+
   console.log(formatHeader('kimi1 wrapper active'));
+  console.log(formatInfo(`Mode: ${needsTools ? 'tools' : 'chat'} | Context: ${formatTokenCount(contextTokens)} tokens | Prompt: ${formatTokenCount(promptTokens)} tokens`));
+
+  // Install the right skill flavour before Kimi reads it.
+  installSkill({ needsTools });
 
   // Always run from an isolated home with strict loop_control.
   ensureKimi1Env();
@@ -275,7 +285,9 @@ async function launchWithArgs(args, context) {
   return new Promise((resolve) => {
     ensureKimi1Env();
 
-    installSkill();
+    // In interactive/resume modes we do not inject static context here; keep
+    // the skill minimal so the built-in rules do not grow the system prompt.
+    installSkill({ needsTools: false });
 
     const child = spawn(CONFIG.KIMI_EXE, args, {
       stdio: 'inherit',
