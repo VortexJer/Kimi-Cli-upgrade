@@ -11,6 +11,7 @@ const { migrateOfficialSessions } = require('./session-migrator');
 const { compactSession, compactLatestSession, compactAllSessions, setAutoCompactMode, getAutoCompactMode } = require('./session-compactor');
 const { enableKimiRedirect, disableKimiRedirect } = require('./profile-manager');
 const { formatHeader, formatInfo, formatSuccess, createTable } = require('./formatter');
+const { showMenu } = require('./menu');
 
 const SESSION_INDEX = path.join(CONFIG.KIMI1_HOME, 'session_index.jsonl');
 
@@ -60,14 +61,14 @@ function showHelp() {
   console.log('kimi1 --clean-empty (-ce)');
   console.log('kimi1 --rename-sessions (-rs)');
   console.log('kimi1 --compact-session (-cs) [--id <id>] [--aggressive]');
-  console.log('kimi1 --auto-compact safe|aggressive|off (-ac)');
+  console.log('kimi1 --auto-compact [safe|aggressive|off] (-ac)  interactive menu if no value');
   console.log('kimi1 --migrate-history (-mh)');
   console.log('');
   console.log('kimi1 --enable-kimi (-e)   redirect "kimi" -> "kimi1"');
   console.log('kimi1 --disable-kimi (-d)  restore original "kimi"');
   console.log('');
-  console.log('kimi1 --max-steps <n> (-ms)  (binary observed cap ~5)');
-  console.log('kimi1 --thinking on|off (-th)');
+  console.log('kimi1 --max-steps [<n>] (-ms)  interactive menu if no value');
+  console.log('kimi1 --thinking [on|off] (-th)  interactive menu if no value');
   console.log('');
   console.log('Note: kimi1 auto-continues a prompt when Kimi hits its per-turn');
   console.log('      max_steps limit, so large tasks still finish.');
@@ -152,9 +153,29 @@ async function main() {
       }
     } else {
       const current = CONFIG.getMaxSteps();
-      console.log(formatInfo(`max_steps_per_turn actual: ${current}`));
-      if (current > CONFIG.EFFECTIVE_MAX_STEPS) {
-        console.log(formatInfo(`(Warning: binary observed cap is ${CONFIG.EFFECTIVE_MAX_STEPS})`));
+      const stepsOptions = [
+        '3   - aggressive token saving',
+        '5   - balanced',
+        '10  - conservative',
+        `current (${current})`,
+        'unlimited - let Kimi use as many as allowed'
+      ];
+      const defaultIdx = current > 10 ? 3 : (current === 10 ? 2 : (current === 5 ? 1 : 0));
+      const selected = await showMenu('Choose max_steps_per_turn:', stepsOptions, defaultIdx);
+      let requested;
+      switch (selected) {
+        case 0: requested = 3; break;
+        case 1: requested = 5; break;
+        case 2: requested = 10; break;
+        case 3: requested = current; break;
+        default: requested = 1000;
+      }
+      CONFIG.setMaxSteps(requested);
+      if (requested > CONFIG.EFFECTIVE_MAX_STEPS) {
+        console.log(formatInfo(`Set to ${requested}.`));
+        console.log(formatInfo(`Warning: official Kimi binary has been observed to cap at ${CONFIG.EFFECTIVE_MAX_STEPS}; higher values may be ignored.`));
+      } else {
+        console.log(formatSuccess(`max_steps_per_turn ajustado a ${requested}`));
       }
     }
     return;
@@ -167,7 +188,14 @@ async function main() {
       const bool = CONFIG.setThinking(val);
       console.log(formatSuccess(`thinking.enabled ajustado a ${bool}`));
     } else {
-      console.log(formatInfo(`thinking.enabled actual: ${CONFIG.getThinking()}`));
+      const current = CONFIG.getThinking();
+      const thinkingOptions = [
+        'OFF - fewer tokens, faster',
+        'ON  - reasoning chain visible, more tokens'
+      ];
+      const selected = await showMenu('Choose thinking mode:', thinkingOptions, current ? 1 : 0);
+      const bool = CONFIG.setThinking(selected === 1 ? 'true' : 'false');
+      console.log(formatSuccess(`thinking.enabled ajustado a ${bool}`));
     }
     return;
   }
@@ -248,8 +276,17 @@ async function main() {
       const mode = setAutoCompactMode(val.toLowerCase());
       console.log(formatSuccess(`Auto-compaction set to ${mode}`));
     } else {
-      const mode = getAutoCompactMode();
-      console.log(formatInfo(`Auto-compaction: ${mode || 'off'}`));
+      const current = getAutoCompactMode() || 'off';
+      const compactOptions = [
+        'safe       - keep last 30 messages (recommended)',
+        'aggressive - keep last 10 messages (more savings, more risk)',
+        'off        - do not auto-compact'
+      ];
+      const defaultIdx = current === 'aggressive' ? 1 : (current === 'off' ? 2 : 0);
+      const selected = await showMenu('Choose automatic session compaction:', compactOptions, defaultIdx);
+      const mode = selected === 1 ? 'aggressive' : (selected === 2 ? 'off' : 'safe');
+      setAutoCompactMode(mode);
+      console.log(formatSuccess(`Auto-compaction set to ${mode}`));
     }
     return;
   }

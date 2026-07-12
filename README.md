@@ -94,7 +94,7 @@ kimi1 --compact-session (-cs)
 kimi1 --compact-session --id <id> (-cs -id)
 kimi1 --compact-session --aggressive  # keep only last 10 messages
 
-# Enable/disable automatic compaction on session resume
+# Enable/disable automatic compaction on session resume (interactive menu if no value)
 kimi1 --auto-compact safe|aggressive|off (-ac)
 
 # Dry-run without calling the API
@@ -106,7 +106,7 @@ kimi1 --cache (-ca)
 kimi1 --no-context (-nc)
 kimi1 --fix (-f)
 
-# Loop / model behavior (max_steps is capped at 5 by the Kimi binary)
+# Loop / model behavior (interactive menu if no value)
 kimi1 --max-steps <n> (-ms)
 kimi1 --thinking on|off (-th)
 
