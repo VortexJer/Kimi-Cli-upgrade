@@ -392,8 +392,9 @@ async function main() {
   }
 
   // Any other native Kimi flag or subcommand (export, vis, provider, etc.)
-  // Treat as native passthrough but with local context injected
-  if (args.length > 0 && (args[0].startsWith('-') || isNaN(parseInt(args[0])))) {
+  // Treat as native passthrough but with local context injected.
+  // A plain word is treated as a prompt below unless it starts with '-'.
+  if (args.length > 0 && args[0].startsWith('-')) {
     const cwd = process.cwd();
     const context = loadContext(cwd);
     await launchWithArgs(args, context);

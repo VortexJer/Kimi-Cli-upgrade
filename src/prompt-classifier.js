@@ -18,7 +18,11 @@ const TOOL_SIGNALS = [
   /\b(fix|debug|refactor|implement|add|remove|update|change|configure|setup|install)\s+(this|that|the|a|an)\b/i,
   /\b(revisa|revisar|actualiza|actualizar|modifica|modificar|corrige|corregir|busca|buscar|encuentra|encontrar|muestra|muestrame|muéstrame|borra|borrar|elimina|eliminar|copia|copiar|mueve|mover)\s+(esto|el|la|los|las|un|una|archivo|archivos|fichero|ficheros|configuracion|configuración|config|settings|carpeta|directorio|folder|src|backup|tmp|temp)\b/i,
   /\b(busca|buscar|encuentra|encontrar)\b.*\b(archivos?|ficheros?|\.log|\.txt|\.json|\.md)\b/i,
-  /\b(config|configuration|configuracion|configuración|settings|package\.json|tsconfig|jsconfig)\b/i
+  /\b(config|configuration|configuracion|configuración|settings|package\.json|tsconfig|jsconfig)\b/i,
+  // Web/app creation prompts
+  /\b(crea|crear|diseña|diseñar|desarrolla|desarrollar|construye|construir|haz|hacer)\b.*\b(web|sitio|landing|p[aá]gina|app|aplicaci[oó]n|aplicacion)\b/i,
+  /\blanding page\b/i,
+  /\bweb-kit\b/i
 ];
 
 // Patterns that are clearly conversational and unlikely to need tools.
