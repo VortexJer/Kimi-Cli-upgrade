@@ -58,7 +58,7 @@ function showHelp() {
   console.log('kimi1 --history --resume <id> (-r)');
   console.log('kimi1 --clean-empty (-ce)');
   console.log('kimi1 --rename-sessions (-rs)');
-  console.log('kimi1 --compact-session (-cs) [--id <id>]');
+  console.log('kimi1 --compact-session (-cs) [--id <id>] [--aggressive]');
   console.log('kimi1 --migrate-history (-mh)');
   console.log('');
   console.log('kimi1 --enable-kimi (-e)   redirect "kimi" -> "kimi1"');
@@ -220,16 +220,19 @@ async function main() {
 
   if (args.includes('--compact-session')) {
     const idIndex = args.indexOf('--id');
+    const aggressive = args.includes('--aggressive');
+    const opts = aggressive ? { keepMessages: 10 } : {};
     let result;
     if (idIndex !== -1 && args[idIndex + 1]) {
-      result = compactSession(args[idIndex + 1]);
+      result = compactSession(args[idIndex + 1], opts);
     } else {
-      result = compactLatestSession();
+      result = compactLatestSession(opts);
     }
     if (result.compacted) {
       console.log(formatSuccess(
         `Compacted: ${(result.originalSize / 1024).toFixed(1)} KB -> ${(result.newSize / 1024).toFixed(1)} KB (${result.droppedEvents} events dropped)`
       ));
+      if (aggressive) console.log(formatInfo('Aggressive mode: only last 10 messages kept.'));
       console.log(formatInfo(`Backup: ${result.backup}`));
     } else {
       console.log(formatInfo(`No compaction needed: ${result.reason}`));

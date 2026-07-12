@@ -92,6 +92,7 @@ kimi1 --rename-sessions (-rs)
 # Compact a session's wire.jsonl (latest session or by ID)
 kimi1 --compact-session (-cs)
 kimi1 --compact-session --id <id> (-cs -id)
+kimi1 --compact-session --aggressive  # keep only last 10 messages
 
 # Dry-run without calling the API
 kimi1 --dry-run (-dr) "your prompt"

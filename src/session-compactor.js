@@ -93,7 +93,7 @@ function findLatestWire(sessionsDir) {
 
 function compactWire(wirePath, opts = {}) {
   const threshold = opts.threshold || CONFIG.WIRE_COMPACT_THRESHOLD_BYTES;
-  const keepMessages = opts.keepMessages || 10;
+  const keepMessages = opts.keepMessages || 30;
   if (!fs.existsSync(wirePath)) return { compacted: false, reason: 'missing' };
   const size = fs.statSync(wirePath).size;
 
