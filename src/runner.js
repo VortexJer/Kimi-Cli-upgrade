@@ -150,14 +150,14 @@ function isMaxStepsExceeded(output) {
 const CONTINUE_PROMPT = `The previous turn hit the max_steps_per_turn limit. Continue the same task from exactly where you stopped. Do not repeat work already completed. Use the prior context and proceed with the next pending action.`;
 
 async function runWithAutoFix(userPrompt, context, options = {}) {
-  const { fix = false, compress = false, cache = false } = options;
+  const { fix = false, compress = false, cache = false, preview = false } = options;
 
   const needsTools = likelyNeedsTools(userPrompt);
-  const promptTokens = estimateTokens(buildPrompt(userPrompt, context, { compress: compress || false }));
+  const promptTokens = estimateTokens(buildPrompt(userPrompt, context, { compress: compress || false, preview }));
   const contextTokens = estimateTokens(Object.values(context).join('\n'));
 
   console.log(formatHeader('kimi1 wrapper active'));
-  console.log(formatInfo(`Mode: ${needsTools ? 'tools' : 'chat'} | Context: ${formatTokenCount(contextTokens)} tokens | Prompt: ${formatTokenCount(promptTokens)} tokens`));
+  console.log(formatInfo(`Mode: ${needsTools ? 'tools' : 'chat'} | Context: ${formatTokenCount(contextTokens)} tokens | Prompt: ${formatTokenCount(promptTokens)} tokens | Preview: ${preview ? 'on' : 'off'}`));
 
   // Install the right skill flavour before Kimi reads it.
   installSkill({ needsTools });
@@ -166,7 +166,8 @@ async function runWithAutoFix(userPrompt, context, options = {}) {
   ensureKimi1Env();
 
   const finalPrompt = buildPrompt(userPrompt, context, {
-    compress: compress || false
+    compress: compress || false,
+    preview
   });
 
   // Optional response cache for repeated prompts.

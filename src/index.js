@@ -40,6 +40,8 @@ const SHORT_FLAGS = {
   '-ca': '--cache',
   '-nc': '--no-context',
   '-f': '--fix',
+  '-pr': '--preview',
+  '-np': '--no-preview',
   '-mh': '--migrate-history',
   '-cm': '--compact-mode',
   '-cs': '--compact-session'
@@ -87,6 +89,8 @@ function showHelp() {
   console.log('kimi1 --cache (-ca)           cache identical prompts');
   console.log('kimi1 --no-context (-nc)      skip KIMI.md/shared context');
   console.log('kimi1 --fix (-f)              enable single auto-correction retry');
+  console.log('kimi1 --preview (-pr)         allow screenshots/PDF previews (more tokens)');
+  console.log('kimi1 --no-preview (default)  skip visual previews to save tokens');
   console.log('');
   console.log('kimi1 --dry-run (-dr) [prompt]');
   console.log('kimi1 --uninstall (-u)');
@@ -360,11 +364,13 @@ async function main() {
   }
 
   // Wrapper-only flags (do not reach Kimi's binary)
-  const WRAPPER_FLAGS = ['--compress', '--cache', '--no-context', '--fix'];
+  const WRAPPER_FLAGS = ['--compress', '--cache', '--no-context', '--fix', '--preview', '--no-preview'];
   const compress = args.includes('--compress');
   const cache = args.includes('--cache');
   const noContext = args.includes('--no-context');
   const fix = args.includes('--fix');
+  // Default: no-preview (saves tokens). Use --preview to enable screenshots/PDF.
+  const preview = args.includes('--preview') && !args.includes('--no-preview');
   const stripWrapperFlags = (arr) => arr.filter(arg => !WRAPPER_FLAGS.includes(arg));
 
   // --dry-run mode
@@ -374,11 +380,11 @@ async function main() {
     const cwd = process.cwd();
     const context = noContext ? {} : loadContext(cwd);
     const needsTools = likelyNeedsTools(userPrompt);
-    const built = buildPrompt(userPrompt, context, { compress });
+    const built = buildPrompt(userPrompt, context, { compress, preview });
     const contextTokens = estimateTokens(Object.values(context).join('\n'));
     const promptTokens = estimateTokens(built);
     console.log(formatHeader('DRY RUN - Prompt que se enviaria a Kimi'));
-    console.log(formatInfo(`Mode: ${needsTools ? 'tools' : 'chat'} | Context files: ${formatTokenCount(contextTokens)} tokens | Total prompt: ${formatTokenCount(promptTokens)} tokens`));
+    console.log(formatInfo(`Mode: ${needsTools ? 'tools' : 'chat'} | Context files: ${formatTokenCount(contextTokens)} tokens | Total prompt: ${formatTokenCount(promptTokens)} tokens | Preview: ${preview ? 'on' : 'off'}`));
     console.log(built);
     return;
   }
@@ -410,7 +416,7 @@ async function main() {
     console.log(formatInfo(`Contexto cargado desde: ${Object.keys(context).join(', ')}`));
   }
 
-  await runWithAutoFix(userPrompt, context, { fix, compress, cache });
+  await runWithAutoFix(userPrompt, context, { fix, compress, cache, preview });
 }
 
 main().catch(err => {

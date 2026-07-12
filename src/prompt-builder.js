@@ -39,6 +39,13 @@ MODE: AUTO-CORRECTION.
 - Output corrected command/code; no commentary.
 `.trim();
 
+const NO_PREVIEW_RULE = `
+PREVIEW POLICY (token saving):
+- Do NOT generate screenshots, images, PDFs, or visual previews.
+- Do NOT read media files to verify appearance.
+- Focus only on writing clean, correct HTML/CSS/JS code.
+`.trim();
+
 const STOP_WORDS = new Set([
   'the', 'a', 'an', 'and', 'or', 'but', 'is', 'are', 'was', 'were',
   'to', 'of', 'in', 'on', 'at', 'for', 'with', 'from', 'as', 'it',
@@ -99,7 +106,8 @@ function buildPrompt(userPrompt, context, options = {}) {
     previousError = null,
     previousOutput = null,
     compress: doCompress = false,
-    history = []
+    history = [],
+    preview = true
   } = options;
 
   const parts = [];
@@ -111,6 +119,9 @@ function buildPrompt(userPrompt, context, options = {}) {
   parts.push(COMPRESSED_CODE_RULE);
   parts.push(TOOL_AVOIDANCE);
   parts.push(maxStepsRule());
+  if (!preview) {
+    parts.push(NO_PREVIEW_RULE);
+  }
   if (autoFix) {
     parts.push(AUTO_FIX_PERSONA);
   }
