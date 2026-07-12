@@ -155,15 +155,28 @@ try {
     $logContent = Get-Content $logFile -Raw
     $stdoutContent = Get-Content $mitmLog -Raw
 
-    if ($logContent -match "REQUEST.*api\.kimi\.com" -or $stdoutContent -match "server connect api\.kimi\.com") {
-        if ($logContent -match "RESPONSE.*api\.kimi\.com" -or $stdoutContent -match "Client TLS handshake failed" -eq $false) {
-            Write-Result "NO CERTIFICATE PINNING DETECTED. Handshake succeeded with mitmproxy CA installed." "Green"
-            Write-Result "kimi.exe performs normal certificate chain validation only." "Green"
-        } else {
-            Write-Result "CERTIFICATE PINNING LIKELY: handshake to api.kimi.com still failed even with trusted CA." "Red"
-        }
+    $serverConnected = $stdoutContent -match "server connect api\.kimi\.com"
+    $clientHandshakeFailed = $stdoutContent -match "Client TLS handshake failed.*api\.kimi\.com" -or
+                            $logContent -match "TLS FAILED CLIENT.*api\.kimi\.com"
+    $requestSeen = $logContent -match "REQUEST.*api\.kimi\.com"
+    $responseSeen = $logContent -match "RESPONSE.*api\.kimi\.com"
+
+    Write-Result "`n--- Analysis ---" "Cyan"
+    Write-Result "Server-side TLS to api.kimi.com: $(if ($serverConnected) { 'OK' } else { 'NO' })" $(if ($serverConnected) { "Green" } else { "Red" })
+    Write-Result "Client-side TLS from kimi.exe: $(if ($clientHandshakeFailed) { 'FAILED' } else { 'OK' })" $(if ($clientHandshakeFailed) { "Red" } else { "Green" })
+    Write-Result "Decrypted request seen: $(if ($requestSeen) { 'YES' } else { 'NO' })" $(if ($requestSeen) { "Green" } else { "Yellow" })
+    Write-Result "Decrypted response seen: $(if ($responseSeen) { 'YES' } else { 'NO' })" $(if ($responseSeen) { "Green" } else { "Yellow" })
+
+    if ($serverConnected -and $clientHandshakeFailed -and -not $responseSeen) {
+        Write-Result "`n>>> CERTIFICATE PINNING CONFIRMED (likely)." "Red"
+        Write-Result "kimi.exe rejected the mitmproxy certificate even though its CA was installed in the Windows trusted root store." "Red"
+        Write-Result "The binary appears to expect a specific certificate/public key for api.kimi.com." "Red"
+        Write-Result "MITM proxy path is NOT viable. Token saving must stay at the wrapper level." "Red"
+    } elseif ($serverConnected -and -not $clientHandshakeFailed -and $responseSeen) {
+        Write-Result "`n>>> NO CERTIFICATE PINNING DETECTED." "Green"
+        Write-Result "kimi.exe accepted the mitmproxy certificate. MITM proxy path is viable." "Green"
     } else {
-        Write-Result "Could not detect api.kimi.com traffic. Check logs." "Yellow"
+        Write-Result "`n>>> INCONCLUSIVE. Check full logs." "Yellow"
     }
 
     Write-Result "`nFull log saved to: $logFile" "Gray"
