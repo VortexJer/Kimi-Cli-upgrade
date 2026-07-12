@@ -161,16 +161,15 @@ function writeIsolatedConfig(toml) {
   fs.writeFileSync(configPath, toml, 'utf-8');
 }
 
-// Kimi binary hard-caps max_steps_per_turn at 5 (observed empirically).
-// Higher values are silently clamped, so we expose the effective limit.
+// Kimi binary has been observed to cap max_steps_per_turn at 5, but the user
+// can still request a higher value in case their binary/plan allows it.
 const EFFECTIVE_MAX_STEPS = 5;
 
 function getMaxSteps() {
   const toml = readIsolatedConfig();
   if (!toml) return EFFECTIVE_MAX_STEPS;
   const match = toml.match(/^max_steps_per_turn\s*=\s*(\d+)/m);
-  const configured = match ? parseInt(match[1], 10) : EFFECTIVE_MAX_STEPS;
-  return Math.min(configured, EFFECTIVE_MAX_STEPS);
+  return match ? parseInt(match[1], 10) : EFFECTIVE_MAX_STEPS;
 }
 
 function setMaxSteps(value) {
@@ -187,7 +186,7 @@ function setMaxSteps(value) {
     toml = toml.replace(/^max_steps_per_turn\s*=\s*\S.*$/m, `max_steps_per_turn = ${n}`);
   }
   fs.writeFileSync(configPath, toml, 'utf-8');
-  return Math.min(n, EFFECTIVE_MAX_STEPS);
+  return n;
 }
 
 function getThinking() {

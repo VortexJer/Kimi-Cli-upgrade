@@ -61,7 +61,7 @@ function showHelp() {
   console.log('kimi1 --enable-kimi (-e)   redirect "kimi" -> "kimi1"');
   console.log('kimi1 --disable-kimi (-d)  restore original "kimi"');
   console.log('');
-  console.log('kimi1 --max-steps <n> (-ms)  (capped at 5 by Kimi binary)');
+  console.log('kimi1 --max-steps <n> (-ms)  (binary observed cap ~5)');
   console.log('kimi1 --thinking on|off (-th)');
   console.log('');
   console.log('Note: kimi1 auto-continues a prompt when Kimi hits its per-turn');
@@ -138,15 +138,19 @@ async function main() {
     const val = args[maxStepsIdx + 1];
     if (val && /^[0-9]+$/.test(val)) {
       const requested = parseInt(val, 10);
-      const effective = CONFIG.setMaxSteps(val);
+      CONFIG.setMaxSteps(val);
       if (requested > CONFIG.EFFECTIVE_MAX_STEPS) {
-        console.log(formatInfo(`Requested ${requested}, but Kimi binary caps max_steps_per_turn at ${CONFIG.EFFECTIVE_MAX_STEPS}.`));
-        console.log(formatInfo(`Effective max_steps_per_turn: ${effective}`));
+        console.log(formatInfo(`Set to ${requested}.`));
+        console.log(formatInfo(`Warning: official Kimi binary has been observed to cap at ${CONFIG.EFFECTIVE_MAX_STEPS}; higher values may be ignored.`));
       } else {
-        console.log(formatSuccess(`max_steps_per_turn ajustado a ${effective}`));
+        console.log(formatSuccess(`max_steps_per_turn ajustado a ${requested}`));
       }
     } else {
-      console.log(formatInfo(`max_steps_per_turn actual: ${CONFIG.getMaxSteps()} (capped at ${CONFIG.EFFECTIVE_MAX_STEPS})`));
+      const current = CONFIG.getMaxSteps();
+      console.log(formatInfo(`max_steps_per_turn actual: ${current}`));
+      if (current > CONFIG.EFFECTIVE_MAX_STEPS) {
+        console.log(formatInfo(`(Warning: binary observed cap is ${CONFIG.EFFECTIVE_MAX_STEPS})`));
+      }
     }
     return;
   }

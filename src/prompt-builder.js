@@ -3,7 +3,7 @@ const CONFIG = require('./config');
 
 function maxStepsRule() {
   const n = CONFIG.getMaxSteps();
-  return `LOOP BUDGET: max_steps_per_turn is ${n} (hard cap). You MUST complete your work within ${n} tool steps. Batch multiple operations into single shell commands, use parallel tool calls when available, and avoid redundant reads. If you cannot finish, emit a clear "[CONTINUE]" marker with the next action so the wrapper can resume.`;
+  return `LOOP BUDGET: max_steps_per_turn is ${n}. Complete your work within ${n} tool steps. Batch operations into single shell commands. If you cannot finish, emit "[CONTINUE]" so the wrapper resumes.`;
 }
 
 const STRICT_NO_VERBIAGE = `
