@@ -373,6 +373,9 @@ async function main() {
   const preview = args.includes('--preview') && !args.includes('--no-preview');
   const stripWrapperFlags = (arr) => arr.filter(arg => !WRAPPER_FLAGS.includes(arg));
 
+  // Remove wrapper flags from args so they don't trigger native passthrough logic.
+  const cleanArgs = stripWrapperFlags(args);
+
   // --dry-run mode
   if (args.includes('--dry-run')) {
     const filteredArgs = stripWrapperFlags(args.filter(arg => arg !== '--dry-run'));
@@ -400,7 +403,7 @@ async function main() {
   // Any other native Kimi flag or subcommand (export, vis, provider, etc.)
   // Treat as native passthrough but with local context injected.
   // A plain word is treated as a prompt below unless it starts with '-'.
-  if (args.length > 0 && args[0].startsWith('-')) {
+  if (cleanArgs.length > 0 && cleanArgs[0].startsWith('-')) {
     const cwd = process.cwd();
     const context = loadContext(cwd);
     await launchWithArgs(args, context);
@@ -408,7 +411,7 @@ async function main() {
   }
 
   // Default: prompt mode
-  const userPrompt = stripWrapperFlags(args).join(' ');
+  const userPrompt = cleanArgs.join(' ');
   const cwd = process.cwd();
   const context = noContext ? {} : loadContext(cwd);
 
