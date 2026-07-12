@@ -283,6 +283,10 @@ async function launchWithArgs(args, context) {
     showCompactReminder(args);
   }
 
+  // Wrapper-only flags must never reach the official Kimi binary.
+  const WRAPPER_FLAGS = ['--compress', '--cache', '--no-context', '--fix', '--preview', '--no-preview'];
+  const cleanArgs = args.filter(arg => !WRAPPER_FLAGS.includes(arg));
+
   return new Promise((resolve) => {
     ensureKimi1Env();
 
@@ -290,7 +294,7 @@ async function launchWithArgs(args, context) {
     // the skill minimal so the built-in rules do not grow the system prompt.
     installSkill({ needsTools: false });
 
-    const child = spawn(CONFIG.KIMI_EXE, args, {
+    const child = spawn(CONFIG.KIMI_EXE, cleanArgs, {
       stdio: 'inherit',
       windowsHide: false,
       env: ensureKimi1Env()
