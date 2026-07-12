@@ -61,7 +61,7 @@ function showHelp() {
   console.log('kimi1 --clean-empty (-ce)');
   console.log('kimi1 --rename-sessions (-rs)');
   console.log('kimi1 --compact-session (-cs) [--id <id>] [--aggressive] (aggressive can break resume)');
-  console.log('kimi1 --auto-compact [safe|aggressive|off] (-ac)  default: off');
+  console.log('kimi1 --auto-compact [safe|aggressive|off] (-ac)  default: off (recommended)');
   console.log('kimi1 --migrate-history (-mh)');
   console.log('');
   console.log('kimi1 --enable-kimi (-e)   redirect "kimi" -> "kimi1"');

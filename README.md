@@ -19,7 +19,7 @@ A local wrapper for the official [Kimi Code CLI](https://moonshotai.github.io/ki
 - **Optional `kimi` redirect**: After installation, `kimi` is fully redirected to `kimi1`; disable anytime.
 - **Token-saving flags**: `--compress`, `--cache`, `--no-context`, `--fix`.
 - **Session migration**: `--migrate-history` imports official Kimi sessions on first install.
-- **Session compaction**: `--compact-session` strips timestamps, IDs, and message metadata from `wire.jsonl`. Loop events are preserved to avoid breaking session resume.
+- **Session compaction (opt-in)**: `--compact-session` strips timestamps, IDs, and message metadata from `wire.jsonl`. Loop events are preserved to avoid breaking session resume. Auto-compaction is **off** by default.
 - **Visual formatting**: Colored output and clean tables via `chalk` and `cli-table3`.
 
 ## Requirements
@@ -95,7 +95,7 @@ kimi1 --compact-session (-cs)
 kimi1 --compact-session --id <id> (-cs -id)
 kimi1 --compact-session --aggressive  # keep only last 10 messages (high risk)
 
-# Enable/disable automatic compaction on session resume (default: off)
+# Enable/disable automatic compaction on session resume (default: off, recommended)
 kimi1 --auto-compact safe|aggressive|off (-ac)
 
 # Dry-run without calling the API
