@@ -12,7 +12,11 @@ A local wrapper for the official [Kimi Code CLI](https://moonshotai.github.io/ki
 - **Arrow-key session selector**: `kimi1 --history` opens a Claude-style interactive picker (Up/Down, Enter, Esc).
 - **Plain session table**: `kimi1 --list` shows a compact table when you do not need the picker.
 - **Auto-generated session names (0 tokens)**: old sessions are renamed locally from the first user prompt using pattern rules + keyword extraction. No API calls.
-- **Optional `kimi` redirect**: Activate/deactivate full `kimi` → `kimi1` redirection at any time.
+- **Isolated home**: `kimi1` runs under its own `~/.kimi-code-kimi1` directory, leaving the official `~/.kimi-code` untouched.
+- **Loop control**: Configurable `max_steps_per_turn` and `thinking` toggle to cut token usage.
+- **Optional `kimi` redirect**: After installation, `kimi` is fully redirected to `kimi1`; disable anytime.
+- **Token-saving flags**: `--compress`, `--cache`, `--no-context`, `--fix`.
+- **Session migration**: `--migrate-history` imports official Kimi sessions on first install.
 - **Visual formatting**: Colored output and clean tables via `chalk` and `cli-table3`.
 
 ## Requirements
@@ -85,9 +89,22 @@ kimi1 --rename-sessions (-rs)
 # Dry-run without calling the API
 kimi1 --dry-run (-dr) "your prompt"
 
+# Token-saving flags (opt-in)
+kimi1 --compress (-cp)
+kimi1 --cache (-ca)
+kimi1 --no-context (-nc)
+kimi1 --fix (-f)
+
+# Loop / model behavior
+kimi1 --max-steps <n> (-ms)
+kimi1 --thinking on|off (-th)
+
 # Redirect "kimi" to "kimi1" / restore original
 kimi1 --enable-kimi (-e)
 kimi1 --disable-kimi (-d)
+
+# Migrate official Kimi sessions into kimi1
+kimi1 --migrate-history (-mh)
 
 # Uninstall
 kimi1 --uninstall (-u)
@@ -105,27 +122,25 @@ kimi1 --help (-he)
 5. When the session ends, the temporary skill is cleaned up.
 6. Session titles are generated locally from the first user prompt, with zero API calls.
 
-## Hybrid `kimi` wrapper
+## `kimi` redirect
 
-The installer registers a hybrid `kimi` function in your PowerShell profile. It intercepts kimi1-specific flags (`--history`, `--list`, `--rename-sessions`, `--clean-empty`, `--dry-run`, etc.) and sends them to `kimi1`, while passing everything else to the official `kimi.exe`.
+After running `install.ps1`, the `kimi` command is fully redirected to `kimi1`. Every `kimi ...` call runs through the wrapper with the isolated home and token-saving defaults.
 
-When you run `kimi --help`, you see the official help followed by the kimi1 help, so all extra commands are documented.
-
-To remove the hybrid wrapper and restore plain `kimi.exe`:
+To temporarily restore the official `kimi.exe` behavior:
 
 ```powershell
 kimi1 --disable-kimi
-kimi1 --d-k        # short alias
+kimi1 -d
 ```
 
-To re-add it later:
+To enable it again:
 
 ```powershell
 kimi1 --enable-kimi
-kimi1 --e-k        # short alias
+kimi1 -e
 ```
 
-Restart your shell after enabling/disabling.
+Restart PowerShell after enabling/disabling.
 
 ## Token-saving architecture
 
