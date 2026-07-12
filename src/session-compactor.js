@@ -16,6 +16,51 @@ const KEEP_EVENT_TYPES = new Set([
   'turn.cancel'
 ]);
 
+// Fields to strip from kept events to reduce size without breaking the wire format.
+function stripEvent(evt) {
+  if (!evt || typeof evt !== 'object') return evt;
+
+  // Remove timing/ids that change every run and bloat the wire.
+  delete evt.time;
+  delete evt.timestamp;
+  delete evt.event_id;
+  delete evt.eventId;
+  delete evt.request_id;
+  delete evt.turnId;
+  delete evt.stepId;
+
+  // Strip message metadata that does not affect context semantics.
+  if (evt.type === 'context.append_message' && evt.message) {
+    delete evt.message.name;
+    delete evt.message.origin;
+    if (Array.isArray(evt.message.content)) {
+      evt.message.content = evt.message.content.map(part => {
+        if (part && typeof part === 'object') {
+          const clean = { type: part.type };
+          if (part.text !== undefined) clean.text = part.text;
+          if (part.toolUseId !== undefined) clean.toolUseId = part.toolUseId;
+          if (part.toolCallId !== undefined) clean.toolCallId = part.toolCallId;
+          if (part.content !== undefined) clean.content = part.content;
+          if (part.input !== undefined) clean.input = part.input;
+          return clean;
+        }
+        return part;
+      });
+    }
+    delete evt.message.toolCalls;
+  }
+
+  // Strip large snapshots down to tool names only.
+  if (evt.type === 'llm.tools_snapshot' && Array.isArray(evt.tools)) {
+    evt.tools = evt.tools.map(t => ({
+      name: t.name,
+      description: t.description ? t.description.slice(0, 120) : undefined
+    })).filter(t => t.name);
+  }
+
+  return evt;
+}
+
 function findWireFiles(sessionsDir) {
   const wires = [];
   if (!fs.existsSync(sessionsDir)) return wires;
@@ -48,15 +93,14 @@ function findLatestWire(sessionsDir) {
 
 function compactWire(wirePath, opts = {}) {
   const threshold = opts.threshold || CONFIG.WIRE_COMPACT_THRESHOLD_BYTES;
+  const keepMessages = opts.keepMessages || 10;
   if (!fs.existsSync(wirePath)) return { compacted: false, reason: 'missing' };
   const size = fs.statSync(wirePath).size;
-  if (size < threshold) return { compacted: false, size, reason: 'under-threshold' };
 
   const raw = fs.readFileSync(wirePath, 'utf-8');
   const lines = raw.split(/\r?\n/).filter(Boolean);
 
   // Keep the most recent user/assistant messages; drop old loop noise.
-  const keepMessages = opts.keepMessages || 30;
   const messageIndices = [];
   for (let i = 0; i < lines.length; i++) {
     try {
@@ -76,11 +120,19 @@ function compactWire(wirePath, opts = {}) {
       const evt = JSON.parse(lines[i]);
       if (KEEP_EVENT_TYPES.has(evt.type)) {
         if (evt.type === 'context.append_message' && i < keepFrom) continue;
-        kept.push(lines[i]);
+        kept.push(JSON.stringify(stripEvent(evt)));
       }
     } catch {
       // drop malformed
     }
+  }
+
+  // Always rewrite if we dropped anything, even under threshold.
+  const newRaw = kept.join('\n') + (kept.length ? '\n' : '');
+  const wouldShrink = newRaw.length < raw.length;
+
+  if (size < threshold && !wouldShrink) {
+    return { compacted: false, size, reason: 'under-threshold-no-shrink' };
   }
 
   // Backup the original wire before rewriting
@@ -90,7 +142,7 @@ function compactWire(wirePath, opts = {}) {
   fs.renameSync(wirePath, backupPath);
 
   // Rewrite the compacted wire
-  fs.writeFileSync(wirePath, kept.join('\n') + (kept.length ? '\n' : ''), 'utf-8');
+  fs.writeFileSync(wirePath, newRaw, 'utf-8');
 
   const newSize = fs.statSync(wirePath).size;
   return {
@@ -115,6 +167,15 @@ function compactLatestSession(opts = {}) {
   return compactWire(wirePath, opts);
 }
 
+function compactAllSessions(opts = {}) {
+  const wires = findWireFiles(path.join(CONFIG.KIMI1_HOME, 'sessions'));
+  const results = [];
+  for (const wire of wires) {
+    results.push(compactWire(wire, opts));
+  }
+  return results;
+}
+
 module.exports = {
   findWireFiles,
   findSessionWire,
@@ -122,5 +183,7 @@ module.exports = {
   compactWire,
   compactSession,
   compactLatestSession,
-  KEEP_EVENT_TYPES
+  compactAllSessions,
+  KEEP_EVENT_TYPES,
+  stripEvent
 };

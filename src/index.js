@@ -8,6 +8,7 @@ const { buildPrompt } = require('./prompt-builder');
 const { uninstall } = require('./uninstall');
 const { listHistory, showSessionDetail, resumeSessionInteractive, cleanEmptySessions, renameAllSessions } = require('./history');
 const { migrateOfficialSessions } = require('./session-migrator');
+const { compactSession, compactLatestSession, compactAllSessions } = require('./session-compactor');
 const { enableKimiRedirect, disableKimiRedirect } = require('./profile-manager');
 const { formatHeader, formatInfo, formatSuccess, createTable } = require('./formatter');
 
@@ -35,7 +36,8 @@ const SHORT_FLAGS = {
   '-ca': '--cache',
   '-nc': '--no-context',
   '-f': '--fix',
-  '-mh': '--migrate-history'
+  '-mh': '--migrate-history',
+  '-cs': '--compact-session'
 };
 
 function normalizeArgs(args) {
@@ -56,6 +58,7 @@ function showHelp() {
   console.log('kimi1 --history --resume <id> (-r)');
   console.log('kimi1 --clean-empty (-ce)');
   console.log('kimi1 --rename-sessions (-rs)');
+  console.log('kimi1 --compact-session (-cs) [--id <id>]');
   console.log('kimi1 --migrate-history (-mh)');
   console.log('');
   console.log('kimi1 --enable-kimi (-e)   redirect "kimi" -> "kimi1"');
@@ -212,6 +215,25 @@ async function main() {
 
   if (args.includes('--rename-sessions')) {
     renameAllSessions({ force: true });
+    return;
+  }
+
+  if (args.includes('--compact-session')) {
+    const idIndex = args.indexOf('--id');
+    let result;
+    if (idIndex !== -1 && args[idIndex + 1]) {
+      result = compactSession(args[idIndex + 1]);
+    } else {
+      result = compactLatestSession();
+    }
+    if (result.compacted) {
+      console.log(formatSuccess(
+        `Compacted: ${(result.originalSize / 1024).toFixed(1)} KB -> ${(result.newSize / 1024).toFixed(1)} KB (${result.droppedEvents} events dropped)`
+      ));
+      console.log(formatInfo(`Backup: ${result.backup}`));
+    } else {
+      console.log(formatInfo(`No compaction needed: ${result.reason}`));
+    }
     return;
   }
 
