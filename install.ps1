@@ -64,6 +64,28 @@ if (-not [string]::IsNullOrWhiteSpace($thinkingInput)) {
 Write-Host "Setting thinking.enabled to $thinkingValue..." -ForegroundColor Cyan
 & node "$kimi1Script" --thinking $thinkingValue
 
+# Ask for automatic session compaction preference
+Write-Host "`nConfigure automatic session compaction:" -ForegroundColor Cyan
+Write-Host "  When you resume a session, the wrapper can compact its wire.jsonl" -ForegroundColor Gray
+Write-Host "  to remove loop noise and shrink the context sent to Kimi." -ForegroundColor Gray
+Write-Host "  safe      = keep last 30 messages (recommended, lower risk)." -ForegroundColor Gray
+Write-Host "  aggressive= keep last 10 messages (more savings, more risk)." -ForegroundColor Gray
+Write-Host "  off       = do not auto-compact." -ForegroundColor Gray
+$compactInput = Read-Host "Auto-compact mode? (safe/aggressive/off, default: safe)"
+
+$compactMode = "safe"
+if (-not [string]::IsNullOrWhiteSpace($compactInput)) {
+    $compactLower = $compactInput.ToLower()
+    if ($compactLower -in @("safe", "aggressive", "off")) {
+        $compactMode = $compactLower
+    } else {
+        Write-Warning "Invalid input. Using default safe."
+    }
+}
+
+Write-Host "Setting auto-compaction to $compactMode..." -ForegroundColor Cyan
+& node "$kimi1Script" --auto-compact $compactMode
+
 # Activate the PowerShell redirect via the wrapper itself
 Write-Host "Activating 'kimi' -> 'kimi1' redirect..." -ForegroundColor Cyan
 & node "$kimi1Script" --enable-kimi

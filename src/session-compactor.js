@@ -2,6 +2,27 @@ const fs = require('fs');
 const path = require('path');
 const CONFIG = require('./config');
 
+const AUTO_COMPACT_MARKER = path.join(CONFIG.KIMI1_HOME, '.auto-compact-mode');
+
+function getAutoCompactMode() {
+  if (!fs.existsSync(AUTO_COMPACT_MARKER)) return null;
+  const mode = fs.readFileSync(AUTO_COMPACT_MARKER, 'utf-8').trim();
+  return mode === 'aggressive' ? 'aggressive' : 'safe';
+}
+
+function setAutoCompactMode(mode) {
+  const normalized = mode === 'aggressive' ? 'aggressive' : 'safe';
+  CONFIG.setupKimi1Home();
+  fs.writeFileSync(AUTO_COMPACT_MARKER, normalized, 'utf-8');
+  return normalized;
+}
+
+function autoCompactOpts() {
+  const mode = getAutoCompactMode();
+  if (!mode) return null;
+  return mode === 'aggressive' ? { keepMessages: 10 } : { keepMessages: 30 };
+}
+
 // Event types worth keeping when compacting a session wire.
 // Everything else (loop events, usage records, permission prompts) is discarded.
 const KEEP_EVENT_TYPES = new Set([
@@ -92,8 +113,9 @@ function findLatestWire(sessionsDir) {
 }
 
 function compactWire(wirePath, opts = {}) {
-  const threshold = opts.threshold || CONFIG.WIRE_COMPACT_THRESHOLD_BYTES;
-  const keepMessages = opts.keepMessages || 30;
+  const auto = autoCompactOpts();
+  const threshold = opts.threshold || (auto && auto.threshold) || CONFIG.WIRE_COMPACT_THRESHOLD_BYTES;
+  const keepMessages = opts.keepMessages || (auto && auto.keepMessages) || 30;
   if (!fs.existsSync(wirePath)) return { compacted: false, reason: 'missing' };
   const size = fs.statSync(wirePath).size;
 
@@ -184,6 +206,8 @@ module.exports = {
   compactSession,
   compactLatestSession,
   compactAllSessions,
+  getAutoCompactMode,
+  setAutoCompactMode,
   KEEP_EVENT_TYPES,
   stripEvent
 };

@@ -8,7 +8,7 @@ const { buildPrompt } = require('./prompt-builder');
 const { uninstall } = require('./uninstall');
 const { listHistory, showSessionDetail, resumeSessionInteractive, cleanEmptySessions, renameAllSessions } = require('./history');
 const { migrateOfficialSessions } = require('./session-migrator');
-const { compactSession, compactLatestSession, compactAllSessions } = require('./session-compactor');
+const { compactSession, compactLatestSession, compactAllSessions, setAutoCompactMode, getAutoCompactMode } = require('./session-compactor');
 const { enableKimiRedirect, disableKimiRedirect } = require('./profile-manager');
 const { formatHeader, formatInfo, formatSuccess, createTable } = require('./formatter');
 
@@ -37,7 +37,8 @@ const SHORT_FLAGS = {
   '-nc': '--no-context',
   '-f': '--fix',
   '-mh': '--migrate-history',
-  '-cs': '--compact-session'
+  '-cs': '--compact-session',
+  '-ac': '--auto-compact'
 };
 
 function normalizeArgs(args) {
@@ -59,6 +60,7 @@ function showHelp() {
   console.log('kimi1 --clean-empty (-ce)');
   console.log('kimi1 --rename-sessions (-rs)');
   console.log('kimi1 --compact-session (-cs) [--id <id>] [--aggressive]');
+  console.log('kimi1 --auto-compact safe|aggressive|off (-ac)');
   console.log('kimi1 --migrate-history (-mh)');
   console.log('');
   console.log('kimi1 --enable-kimi (-e)   redirect "kimi" -> "kimi1"');
@@ -236,6 +238,18 @@ async function main() {
       console.log(formatInfo(`Backup: ${result.backup}`));
     } else {
       console.log(formatInfo(`No compaction needed: ${result.reason}`));
+    }
+    return;
+  }
+
+  if (args.includes('--auto-compact')) {
+    const val = getArgValue(args, ['--auto-compact']);
+    if (val && ['safe', 'aggressive', 'off'].includes(val.toLowerCase())) {
+      const mode = setAutoCompactMode(val.toLowerCase());
+      console.log(formatSuccess(`Auto-compaction set to ${mode}`));
+    } else {
+      const mode = getAutoCompactMode();
+      console.log(formatInfo(`Auto-compaction: ${mode || 'off'}`));
     }
     return;
   }

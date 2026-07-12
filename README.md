@@ -37,7 +37,7 @@ cd kimi-cli-upgrade
 .\install.ps1
 ```
 
-During installation you will be asked for `max_steps_per_turn` (press ENTER for unlimited) and for `thinking` mode (press ENTER for off). Restart PowerShell. The installer creates both `kimi1` and a hybrid `kimi` wrapper, so most kimi1 commands are also available through the official `kimi` command:
+During installation you will be asked for `max_steps_per_turn` (press ENTER for unlimited), `thinking` mode (press ENTER for off), and `auto-compact` mode (press ENTER for safe). Restart PowerShell. The installer creates both `kimi1` and a hybrid `kimi` wrapper, so most kimi1 commands are also available through the official `kimi` command:
 
 ```powershell
 kimi1 --help
@@ -93,6 +93,9 @@ kimi1 --rename-sessions (-rs)
 kimi1 --compact-session (-cs)
 kimi1 --compact-session --id <id> (-cs -id)
 kimi1 --compact-session --aggressive  # keep only last 10 messages
+
+# Enable/disable automatic compaction on session resume
+kimi1 --auto-compact safe|aggressive|off (-ac)
 
 # Dry-run without calling the API
 kimi1 --dry-run (-dr) "your prompt"
