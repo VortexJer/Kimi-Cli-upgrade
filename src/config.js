@@ -172,20 +172,37 @@ function getMaxSteps() {
   return match ? parseInt(match[1], 10) : EFFECTIVE_MAX_STEPS;
 }
 
-function setMaxSteps(value) {
-  const n = parseInt(value, 10);
-  if (!Number.isFinite(n) || n < 1) {
-    throw new Error(`Valor invalido para max_steps_per_turn: ${value}. Debe ser un entero >= 1.`);
+function applyMaxStepsToConfig(configPath, n) {
+  let toml;
+  try {
+    toml = fs.readFileSync(configPath, 'utf-8');
+  } catch (err) {
+    return false;
   }
-  setupKimi1Home();
-  const configPath = path.join(KIMI1_HOME, 'config.toml');
-  let toml = fs.readFileSync(configPath, 'utf-8');
   if (!/^\[loop_control\]$/m.test(toml)) {
     toml += `\n[loop_control]\nmax_steps_per_turn = ${n}\n`;
   } else {
     toml = toml.replace(/^max_steps_per_turn\s*=\s*\S.*$/m, `max_steps_per_turn = ${n}`);
   }
   fs.writeFileSync(configPath, toml, 'utf-8');
+  return true;
+}
+
+function setMaxSteps(value) {
+  const n = parseInt(value, 10);
+  if (!Number.isFinite(n) || n < 1) {
+    throw new Error(`Valor invalido para max_steps_per_turn: ${value}. Debe ser un entero >= 1.`);
+  }
+  setupKimi1Home();
+
+  // 1. Isolated config (always used by kimi1)
+  const isolatedConfigPath = path.join(KIMI1_HOME, 'config.toml');
+  applyMaxStepsToConfig(isolatedConfigPath, n);
+
+  // 2. Official config (so direct kimi.exe calls also respect the choice)
+  const officialConfigPath = path.join(KIMI_HOME, 'config.toml');
+  applyMaxStepsToConfig(officialConfigPath, n);
+
   return n;
 }
 
