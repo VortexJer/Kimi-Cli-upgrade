@@ -12,10 +12,13 @@ const TOOL_SIGNALS = [
   /\b(code|repo|repository|project|commit|branch|push|pull|git|github|merge|diff|patch)\b/i,
   // Commands / execution
   /\b(run|execute|exec|command|cmd|bash|powershell|terminal|shell|npm|node|python|pip|install|build|test)\b/i,
-  // Specific tools
-  /\b(KIMI\.md|CLAUDE\.md|\.md|\.json|\.toml|\.yaml|\.yml|\.js|\.ts|\.py)\b/i,
+  // Specific tools / file references
+  /\b(KIMI\.md|CLAUDE\.md|README|\.md|\.json|\.toml|\.yaml|\.yml|\.js|\.ts|\.py|\.log|\.txt)\b/i,
   // Actions that imply workspace interaction
-  /\b(fix|debug|refactor|implement|add|remove|update|change|configure|setup|install)\s+(this|that|the|a|an)\b/i
+  /\b(fix|debug|refactor|implement|add|remove|update|change|configure|setup|install)\s+(this|that|the|a|an)\b/i,
+  /\b(revisa|revisar|actualiza|actualizar|modifica|modificar|corrige|corregir|busca|buscar|encuentra|encontrar|muestra|muestrame|muéstrame|borra|borrar|elimina|eliminar|copia|copiar|mueve|mover)\s+(esto|el|la|los|las|un|una|archivo|archivos|fichero|ficheros|configuracion|configuración|config|settings|carpeta|directorio|folder|src|backup|tmp|temp)\b/i,
+  /\b(busca|buscar|encuentra|encontrar)\b.*\b(archivos?|ficheros?|\.log|\.txt|\.json|\.md)\b/i,
+  /\b(config|configuration|configuracion|configuración|settings|package\.json|tsconfig|jsconfig)\b/i
 ];
 
 // Patterns that are clearly conversational and unlikely to need tools.

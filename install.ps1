@@ -54,20 +54,32 @@ function Show-Menu {
     return $selected
 }
 
-# Ensure Node.js dependencies are installed
+# Ensure Node.js dependencies are installed and actually loadable.
+# A partially copied/missing node_modules can fail later with MODULE_NOT_FOUND,
+# so we verify by requiring the key runtime modules.
+function Test-DependenciesLoadable {
+    try {
+        $null = & node -e "require('chalk'); require('cli-table3');" 2>$null
+        return ($LASTEXITCODE -eq 0)
+    } catch {
+        return $false
+    }
+}
+
 $nodeModules = Join-Path $repoDir "node_modules"
-if (-not (Test-Path $nodeModules)) {
+if ((-not (Test-Path $nodeModules)) -or (-not (Test-DependenciesLoadable))) {
     Write-Host "Installing Node.js dependencies..." -ForegroundColor Cyan
     Push-Location $repoDir
     try {
         & npm install
         if ($LASTEXITCODE -ne 0) { throw "npm install failed" }
+        if (-not (Test-DependenciesLoadable)) { throw "Dependencies installed but failed to load" }
     } finally {
         Pop-Location
     }
-    Write-Host "Dependencies installed." -ForegroundColor Green
+    Write-Host "Dependencies installed and verified." -ForegroundColor Green
 } else {
-    Write-Host "Dependencies already installed." -ForegroundColor Gray
+    Write-Host "Dependencies already installed and loadable." -ForegroundColor Gray
 }
 
 # Migrate official Kimi sessions so --history shows everything from day one
