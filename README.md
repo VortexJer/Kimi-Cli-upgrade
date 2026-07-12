@@ -35,7 +35,7 @@ cd kimi-cli-upgrade
 .\install.ps1
 ```
 
-Restart PowerShell. The installer creates both `kimi1` and a hybrid `kimi` wrapper, so most kimi1 commands are also available through the official `kimi` command:
+During installation you will be asked for `max_steps_per_turn`; press ENTER to leave it unlimited. Restart PowerShell. The installer creates both `kimi1` and a hybrid `kimi` wrapper, so most kimi1 commands are also available through the official `kimi` command:
 
 ```powershell
 kimi1 --help

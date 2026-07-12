@@ -28,10 +28,26 @@ if (-not (Test-Path $nodeModules)) {
 Write-Host "Migrating official Kimi session history..." -ForegroundColor Cyan
 & node "$kimi1Script" --migrate-history
 
-# Set max_steps to the effective cap enforced by the Kimi binary (5).
-# Higher values are silently ignored by kimi.exe, so we align the config.
-Write-Host "Setting max_steps_per_turn to 5 (Kimi binary hard cap)..." -ForegroundColor Cyan
-& node "$kimi1Script" --max-steps 5
+# Ask for max_steps preference
+Write-Host "`nConfigure max_steps_per_turn:" -ForegroundColor Cyan
+Write-Host "  This limits how many tool steps Kimi can take inside a single turn." -ForegroundColor Gray
+Write-Host "  Lower = less tokens per turn, but may stop mid-task." -ForegroundColor Gray
+Write-Host "  Higher = more work per turn, but uses more tokens." -ForegroundColor Gray
+Write-Host "  Note: the official Kimi binary has been observed to cap this at 5." -ForegroundColor Gray
+Write-Host "  Choosing 'unlimited' sets a high value so Kimi uses as many as allowed." -ForegroundColor Gray
+$stepsInput = Read-Host "Enter a number (3/aggressive, 5/balanced, 10+/conservative) or press ENTER for unlimited"
+
+$stepsValue = 1000  # default: effectively unlimited
+if (-not [string]::IsNullOrWhiteSpace($stepsInput)) {
+    if ($stepsInput -match '^\d+$') {
+        $stepsValue = [int]$stepsInput
+    } else {
+        Write-Warning "Invalid input. Using default unlimited."
+    }
+}
+
+Write-Host "Setting max_steps_per_turn to $stepsValue..." -ForegroundColor Cyan
+& node "$kimi1Script" --max-steps $stepsValue
 
 # Activate the PowerShell redirect via the wrapper itself
 Write-Host "Activating 'kimi' -> 'kimi1' redirect..." -ForegroundColor Cyan
