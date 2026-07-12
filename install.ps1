@@ -8,6 +8,52 @@ if (-not $repoDir) {
 
 $kimi1Script = Join-Path $repoDir "bin\kimi1.js"
 
+function Show-Menu {
+    param(
+        [Parameter(Mandatory)] [string]$Title,
+        [Parameter(Mandatory)] [array]$Options,
+        [int]$DefaultIndex = 0
+    )
+
+    Write-Host "`n$Title" -ForegroundColor Cyan
+    $selected = $DefaultIndex
+    $done = $false
+
+    while (-not $done) {
+        for ($i = 0; $i -lt $Options.Length; $i++) {
+            $prefix = if ($i -eq $selected) { "> " } else { "  " }
+            $color = if ($i -eq $selected) { 'Green' } else { 'Gray' }
+            Write-Host "$prefix[$($i + 1)] $($Options[$i])" -ForegroundColor $color
+        }
+
+        $key = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+        switch ($key.VirtualKeyCode) {
+            38 { # Up
+                $selected = if ($selected -gt 0) { $selected - 1 } else { $Options.Length - 1 }
+            }
+            40 { # Down
+                $selected = if ($selected -lt ($Options.Length - 1)) { $selected + 1 } else { 0 }
+            }
+            13 { # Enter
+                $done = $true
+            }
+            27 { # Esc
+                $selected = $DefaultIndex
+                $done = $true
+            }
+        }
+
+        if (-not $done) {
+            $cursorTop = [Console]::CursorTop - $Options.Length
+            if ($cursorTop -ge 0) {
+                [Console]::SetCursorPosition(0, $cursorTop)
+            }
+        }
+    }
+
+    return $selected
+}
+
 # Ensure Node.js dependencies are installed
 $nodeModules = Join-Path $repoDir "node_modules"
 if (-not (Test-Path $nodeModules)) {
@@ -28,61 +74,45 @@ if (-not (Test-Path $nodeModules)) {
 Write-Host "Migrating official Kimi session history..." -ForegroundColor Cyan
 & node "$kimi1Script" --migrate-history
 
-# Ask for max_steps preference
-Write-Host "`nConfigure max_steps_per_turn:" -ForegroundColor Cyan
-Write-Host "  This limits how many tool steps Kimi can take inside a single turn." -ForegroundColor Gray
-Write-Host "  Lower = less tokens per turn, but may stop mid-task." -ForegroundColor Gray
-Write-Host "  Higher = more work per turn, but uses more tokens." -ForegroundColor Gray
-Write-Host "  Note: the official Kimi binary has been observed to cap this at 5." -ForegroundColor Gray
-Write-Host "  Choosing 'unlimited' sets a high value so Kimi uses as many as allowed." -ForegroundColor Gray
-$stepsInput = Read-Host "Enter a number (3/aggressive, 5/balanced, 10+/conservative) or press ENTER for unlimited"
-
-$stepsValue = 1000  # default: effectively unlimited
-if (-not [string]::IsNullOrWhiteSpace($stepsInput)) {
-    if ($stepsInput -match '^\d+$') {
-        $stepsValue = [int]$stepsInput
-    } else {
-        Write-Warning "Invalid input. Using default unlimited."
-    }
+# Ask for max_steps preference with arrow-key menu
+$stepsOptions = @(
+    "3   - aggressive token saving",
+    "5   - balanced",
+    "10  - conservative",
+    "unlimited - let Kimi use as many as allowed"
+)
+$stepsIndex = Show-Menu -Title "Choose max_steps_per_turn:" -Options $stepsOptions -DefaultIndex 3
+$stepsValue = switch ($stepsIndex) {
+    0 { 3 }
+    1 { 5 }
+    2 { 10 }
+    default { 1000 }
 }
-
 Write-Host "Setting max_steps_per_turn to $stepsValue..." -ForegroundColor Cyan
 & node "$kimi1Script" --max-steps $stepsValue
 
-# Ask for thinking preference
-Write-Host "`nConfigure thinking mode:" -ForegroundColor Cyan
-Write-Host "  ON  = Kimi shows its reasoning chain (better quality, more tokens)." -ForegroundColor Gray
-Write-Host "  OFF = Kimi answers directly (fewer tokens, faster)." -ForegroundColor Gray
-$thinkingInput = Read-Host "Enable thinking? (y/N, default: N)"
-$thinkingValue = "false"
-if (-not [string]::IsNullOrWhiteSpace($thinkingInput)) {
-    if ($thinkingInput -match '^[yY]') {
-        $thinkingValue = "true"
-    }
-}
-
+# Ask for thinking preference with arrow-key menu
+$thinkingOptions = @(
+    "OFF - fewer tokens, faster (default)",
+    "ON  - reasoning chain visible, more tokens"
+)
+$thinkingIndex = Show-Menu -Title "Choose thinking mode:" -Options $thinkingOptions -DefaultIndex 0
+$thinkingValue = if ($thinkingIndex -eq 1) { "true" } else { "false" }
 Write-Host "Setting thinking.enabled to $thinkingValue..." -ForegroundColor Cyan
 & node "$kimi1Script" --thinking $thinkingValue
 
-# Ask for automatic session compaction preference
-Write-Host "`nConfigure automatic session compaction:" -ForegroundColor Cyan
-Write-Host "  When you resume a session, the wrapper can compact its wire.jsonl" -ForegroundColor Gray
-Write-Host "  to remove loop noise and shrink the context sent to Kimi." -ForegroundColor Gray
-Write-Host "  safe      = keep last 30 messages (recommended, lower risk)." -ForegroundColor Gray
-Write-Host "  aggressive= keep last 10 messages (more savings, more risk)." -ForegroundColor Gray
-Write-Host "  off       = do not auto-compact." -ForegroundColor Gray
-$compactInput = Read-Host "Auto-compact mode? (safe/aggressive/off, default: safe)"
-
-$compactMode = "safe"
-if (-not [string]::IsNullOrWhiteSpace($compactInput)) {
-    $compactLower = $compactInput.ToLower()
-    if ($compactLower -in @("safe", "aggressive", "off")) {
-        $compactMode = $compactLower
-    } else {
-        Write-Warning "Invalid input. Using default safe."
-    }
+# Ask for automatic session compaction preference with arrow-key menu
+$compactOptions = @(
+    "safe       - keep last 30 messages (recommended)",
+    "aggressive - keep last 10 messages (more savings, more risk)",
+    "off        - do not auto-compact"
+)
+$compactIndex = Show-Menu -Title "Choose automatic session compaction:" -Options $compactOptions -DefaultIndex 0
+$compactMode = switch ($compactIndex) {
+    1 { "aggressive" }
+    2 { "off" }
+    default { "safe" }
 }
-
 Write-Host "Setting auto-compaction to $compactMode..." -ForegroundColor Cyan
 & node "$kimi1Script" --auto-compact $compactMode
 
@@ -93,4 +123,4 @@ Write-Host "Activating 'kimi' -> 'kimi1' redirect..." -ForegroundColor Cyan
 Write-Host "`nInstallation complete." -ForegroundColor Green
 Write-Host "Restart PowerShell. From then on 'kimi' will use the kimi1 wrapper." -ForegroundColor Cyan
 Write-Host "To disable the redirect: kimi1 --disable-kimi" -ForegroundColor Cyan
-Write-Host "Note: The wrapper auto-continues when Kimi hits its 5-step per-turn limit." -ForegroundColor Gray
+Write-Host "To re-run this installer: .\install.ps1" -ForegroundColor Gray

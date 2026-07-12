@@ -37,7 +37,7 @@ cd kimi-cli-upgrade
 .\install.ps1
 ```
 
-During installation you will be asked for `max_steps_per_turn` (press ENTER for unlimited), `thinking` mode (press ENTER for off), and `auto-compact` mode (press ENTER for safe). Restart PowerShell. The installer creates both `kimi1` and a hybrid `kimi` wrapper, so most kimi1 commands are also available through the official `kimi` command:
+During installation you will pick `max_steps_per_turn`, `thinking` mode, and `auto-compact` mode from arrow-key menus (Up/Down + Enter). Restart PowerShell. The installer creates both `kimi1` and a hybrid `kimi` wrapper, so most kimi1 commands are also available through the official `kimi` command:
 
 ```powershell
 kimi1 --help
