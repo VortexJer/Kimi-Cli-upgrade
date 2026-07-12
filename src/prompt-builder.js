@@ -1,4 +1,10 @@
 const { getContextSummary } = require('./context-loader');
+const CONFIG = require('./config');
+
+function maxStepsRule() {
+  const n = CONFIG.getMaxSteps();
+  return `LOOP BUDGET: max_steps_per_turn is ${n} (hard cap). You MUST complete your work within ${n} tool steps. Batch multiple operations into single shell commands, use parallel tool calls when available, and avoid redundant reads. If you cannot finish, emit a clear "[CONTINUE]" marker with the next action so the wrapper can resume.`;
+}
 
 const STRICT_NO_VERBIAGE = `
 STRICT OUTPUT RULES (token saving):
@@ -102,6 +108,7 @@ function buildPrompt(userPrompt, context, options = {}) {
   parts.push(STRICT_NO_VERBIAGE);
   parts.push(BINARY_GUARD);
   parts.push(COMPRESSED_CODE_RULE);
+  parts.push(maxStepsRule());
   if (autoFix) {
     parts.push(AUTO_FIX_PERSONA);
   }

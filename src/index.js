@@ -61,8 +61,11 @@ function showHelp() {
   console.log('kimi1 --enable-kimi (-e)   redirect "kimi" -> "kimi1"');
   console.log('kimi1 --disable-kimi (-d)  restore original "kimi"');
   console.log('');
-  console.log('kimi1 --max-steps <n> (-ms)');
+  console.log('kimi1 --max-steps <n> (-ms)  (capped at 5 by Kimi binary)');
   console.log('kimi1 --thinking on|off (-th)');
+  console.log('');
+  console.log('Note: kimi1 auto-continues a prompt when Kimi hits its per-turn');
+  console.log('      max_steps limit, so large tasks still finish.');
   console.log('');
   console.log('Token-saving flags (opt-in):');
   console.log('kimi1 --compress (-cp)        compress prompt before sending');
@@ -134,10 +137,16 @@ async function main() {
   if (maxStepsIdx !== -1) {
     const val = args[maxStepsIdx + 1];
     if (val && /^[0-9]+$/.test(val)) {
-      const n = CONFIG.setMaxSteps(val);
-      console.log(formatSuccess(`max_steps_per_turn ajustado a ${n}`));
+      const requested = parseInt(val, 10);
+      const effective = CONFIG.setMaxSteps(val);
+      if (requested > CONFIG.EFFECTIVE_MAX_STEPS) {
+        console.log(formatInfo(`Requested ${requested}, but Kimi binary caps max_steps_per_turn at ${CONFIG.EFFECTIVE_MAX_STEPS}.`));
+        console.log(formatInfo(`Effective max_steps_per_turn: ${effective}`));
+      } else {
+        console.log(formatSuccess(`max_steps_per_turn ajustado a ${effective}`));
+      }
     } else {
-      console.log(formatInfo(`max_steps_per_turn actual: ${CONFIG.getMaxSteps()}`));
+      console.log(formatInfo(`max_steps_per_turn actual: ${CONFIG.getMaxSteps()} (capped at ${CONFIG.EFFECTIVE_MAX_STEPS})`));
     }
     return;
   }

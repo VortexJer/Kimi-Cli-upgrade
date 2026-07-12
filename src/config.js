@@ -88,9 +88,12 @@ function setupKimi1Home() {
   if (shouldCopy(srcConfig, dstConfig)) {
     let toml = fs.readFileSync(srcConfig, 'utf-8');
     if (!/^\[loop_control\]$/m.test(toml)) {
-      toml += '\n[loop_control]\nmax_steps_per_turn = 3\nmax_retries_per_step = 1\nreserved_context_size = 8192\n';
+      toml += '\n[loop_control]\nmax_steps_per_turn = 5\nmax_retries_per_step = 1\nreserved_context_size = 8192\n';
     } else {
-      toml = toml.replace(/^max_steps_per_turn\s*=\s*\S.*$/m, 'max_steps_per_turn = 3');
+      // Preserve user's max_steps choice (do not downgrade); only ensure values exist.
+      if (!/^max_steps_per_turn\s*=/m.test(toml)) {
+        toml = toml.replace(/^\[loop_control\]$/m, '[loop_control]\nmax_steps_per_turn = 5');
+      }
       toml = toml.replace(/^max_retries_per_step\s*=\s*\S.*$/m, 'max_retries_per_step = 1');
       if (!/^reserved_context_size\s*=/m.test(toml)) {
         toml = toml.replace(/^(\[loop_control\][\s\S]*?)(?=\n\[|\n*$)/, '$1reserved_context_size = 8192\n');
@@ -144,11 +147,16 @@ function writeIsolatedConfig(toml) {
   fs.writeFileSync(configPath, toml, 'utf-8');
 }
 
+// Kimi binary hard-caps max_steps_per_turn at 5 (observed empirically).
+// Higher values are silently clamped, so we expose the effective limit.
+const EFFECTIVE_MAX_STEPS = 5;
+
 function getMaxSteps() {
   const toml = readIsolatedConfig();
-  if (!toml) return 3;
+  if (!toml) return EFFECTIVE_MAX_STEPS;
   const match = toml.match(/^max_steps_per_turn\s*=\s*(\d+)/m);
-  return match ? parseInt(match[1], 10) : 3;
+  const configured = match ? parseInt(match[1], 10) : EFFECTIVE_MAX_STEPS;
+  return Math.min(configured, EFFECTIVE_MAX_STEPS);
 }
 
 function setMaxSteps(value) {
@@ -165,7 +173,7 @@ function setMaxSteps(value) {
     toml = toml.replace(/^max_steps_per_turn\s*=\s*\S.*$/m, `max_steps_per_turn = ${n}`);
   }
   fs.writeFileSync(configPath, toml, 'utf-8');
-  return n;
+  return Math.min(n, EFFECTIVE_MAX_STEPS);
 }
 
 function getThinking() {
@@ -200,10 +208,12 @@ const CONFIG = {
   setupKimi1Home,
   getMaxSteps,
   setMaxSteps,
+  EFFECTIVE_MAX_STEPS,
   getThinking,
   setThinking,
   PROJECT_DIR: path.join(HOME, 'kimi-cli-upgrade'),
   MAX_RETRIES: 3,
+  MAX_CONTINUATIONS: 5,
   ERROR_TAIL_LINES: 20,
   WIRE_COMPACT_THRESHOLD_BYTES: 200 * 1024, // 200 KB
   CONTEXT_FILES: [

@@ -48,9 +48,11 @@ function compactBeforeContinue(args) {
   }
 }
 
-function runKimi(prompt) {
+function runKimi(prompt, sessionId = null) {
   return new Promise((resolve) => {
-    const args = ['-p', prompt, '--output-format', 'text'];
+    const args = sessionId
+      ? ['-S', sessionId, '-p', prompt, '--output-format', 'text']
+      : ['-p', prompt, '--output-format', 'text'];
     const child = spawn(CONFIG.KIMI_EXE, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
@@ -78,6 +80,17 @@ function runKimi(prompt) {
   });
 }
 
+function extractSessionId(output) {
+  const match = output.match(/kimi\s+-r\s+(session_[a-f0-9-]+)/i);
+  return match ? match[1] : null;
+}
+
+function isMaxStepsExceeded(output) {
+  return /loop\.max_steps_exceeded|Turn exceeded maxSteps/i.test(output || '');
+}
+
+const CONTINUE_PROMPT = `The previous turn hit the max_steps_per_turn limit. Continue the same task from exactly where you stopped. Do not repeat work already completed. Use the prior context and proceed with the next pending action.`;
+
 async function runWithAutoFix(userPrompt, context, options = {}) {
   const { fix = false, compress = false, cache = false } = options;
 
@@ -101,17 +114,40 @@ async function runWithAutoFix(userPrompt, context, options = {}) {
   }
 
   // 1. Single attempt
-  const firstResult = await runKimi(finalPrompt);
-
-  if (firstResult.stdout) {
-    console.log(prettyPrint(firstResult.stdout));
+  let result = await runKimi(finalPrompt);
+  let sessionId = extractSessionId(result.stdout || '');
+  if (result.stdout) {
+    console.log(prettyPrint(result.stdout));
   }
 
-  const success = firstResult.code === 0 && !firstResult.stderr;
+  // 2. Auto-continue on max_steps_exceeded (Kimi caps per-turn steps at 5)
+  let continuations = 0;
+  while (isMaxStepsExceeded(result.stderr || result.stdout) && continuations < CONFIG.MAX_CONTINUATIONS) {
+    continuations++;
+    console.log(formatInfo(`Turn hit max_steps limit. Auto-continuing (${continuations}/${CONFIG.MAX_CONTINUATIONS})...`));
+    if (!sessionId) {
+      console.log(formatError('Could not extract session ID for continuation.'));
+      break;
+    }
+    result = await runKimi(CONTINUE_PROMPT, sessionId);
+    sessionId = extractSessionId(result.stdout || '') || sessionId;
+    if (result.stdout) {
+      console.log(prettyPrint(result.stdout));
+    }
+  }
+
+  const success = result.code === 0 && !result.stderr && !isMaxStepsExceeded(result.stderr || result.stdout);
 
   if (success) {
-    if (cache) setCachedResponse(finalPrompt, firstResult.stdout);
+    if (cache) setCachedResponse(finalPrompt, result.stdout);
     console.log(formatSuccess('Execution completed.'));
+    saveSessionTitleByPrompt(userPrompt, process.cwd());
+    return;
+  }
+
+  // If we auto-continued and still hit the limit, report it cleanly.
+  if (isMaxStepsExceeded(result.stderr || result.stdout)) {
+    console.log(formatError(`Still hitting max_steps limit after ${continuations} continuation(s). The task is too large for one Kimi turn; resume manually with: kimi -S ${sessionId}`));
     saveSessionTitleByPrompt(userPrompt, process.cwd());
     return;
   }
@@ -122,20 +158,20 @@ async function runWithAutoFix(userPrompt, context, options = {}) {
     return;
   }
 
-  // 2. Single correction attempt (opt-in)
-  const errorSnippet = tailLines(firstResult.stderr || firstResult.stdout || 'Unknown error', CONFIG.ERROR_TAIL_LINES);
+  // 3. Single correction attempt (opt-in)
+  const errorSnippet = tailLines(result.stderr || result.stdout || 'Unknown error', CONFIG.ERROR_TAIL_LINES);
   console.log(formatError('Error detected:'));
   console.log(errorSnippet);
 
   const correctionPrompt = buildPrompt(userPrompt, context, {
     autoFix: true,
     previousError: errorSnippet,
-    previousOutput: firstResult.stdout,
+    previousOutput: result.stdout,
     compress: true
   });
 
   console.log(formatInfo('Running single correction attempt...'));
-  const finalResult = await runKimi(correctionPrompt);
+  const finalResult = await runKimi(correctionPrompt, sessionId);
 
   if (finalResult.stdout) {
     console.log(prettyPrint(finalResult.stdout));

@@ -14,6 +14,7 @@ A local wrapper for the official [Kimi Code CLI](https://moonshotai.github.io/ki
 - **Auto-generated session names (0 tokens)**: old sessions are renamed locally from the first user prompt using pattern rules + keyword extraction. No API calls.
 - **Isolated home**: `kimi1` runs under its own `~/.kimi-code-kimi1` directory, leaving the official `~/.kimi-code` untouched.
 - **Loop control**: Configurable `max_steps_per_turn` and `thinking` toggle to cut token usage.
+- **Auto-continuation**: When Kimi hits its per-turn `max_steps` cap, `kimi1` automatically resumes the same session and continues the task.
 - **Optional `kimi` redirect**: After installation, `kimi` is fully redirected to `kimi1`; disable anytime.
 - **Token-saving flags**: `--compress`, `--cache`, `--no-context`, `--fix`.
 - **Session migration**: `--migrate-history` imports official Kimi sessions on first install.
@@ -95,7 +96,7 @@ kimi1 --cache (-ca)
 kimi1 --no-context (-nc)
 kimi1 --fix (-f)
 
-# Loop / model behavior
+# Loop / model behavior (max_steps is capped at 5 by the Kimi binary)
 kimi1 --max-steps <n> (-ms)
 kimi1 --thinking on|off (-th)
 
@@ -118,7 +119,8 @@ kimi1 --help (-he)
 1. In **prompt mode** (`kimi1 "..."`), `kimi1` loads local context files and wraps them in XML tags at the top of the `-p` prompt.
 2. It forwards the enriched prompt to your official `kimi` binary.
 3. If the executed command fails, it builds a **single** correction prompt with the tail of the error and the previous output, then calls Kimi one more time.
-4. In **interactive/resume** modes it installs a minimal local skill with high-level operational rules only (no static context injection).
+4. If Kimi hits its per-turn `max_steps` cap, `kimi1` extracts the session ID and sends a continuation prompt in the same session, repeating until the task finishes or a safety limit is reached.
+5. In **interactive/resume** modes it installs a minimal local skill with high-level operational rules only (no static context injection).
 5. When the session ends, the temporary skill is cleaned up.
 6. Session titles are generated locally from the first user prompt, with zero API calls.
 
@@ -148,6 +150,7 @@ Restart PowerShell after enabling/disabling.
 |-----------|----------------------|
 | Zero-token titles | Session names extracted locally with pattern rules + keyword extraction |
 | Single-shot auto-fix | At most 2 Kimi calls: initial + one correction, not a loop |
+| Per-turn step cap handling | Auto-resume on `max_steps_exceeded`; large tasks continue across turns |
 | Context minification | Local whitespace/newline compression of context files before injection |
 | Relevance pruning | Only history messages sharing keywords with the current prompt are kept |
 | Payload guard | System prompt forbids reading binary/multimedia/dependency bytes |
