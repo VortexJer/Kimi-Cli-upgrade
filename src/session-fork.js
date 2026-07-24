@@ -94,7 +94,16 @@ function truncate(text, max) {
 const FILLERS = new Set(['continua', 'continúa', 'continue', 'sigue', 'ok', 'okay', 'vale', 'dale', 'si', 'sí', 'yes']);
 
 function cleanUserText(text) {
-  return text
+  let t = text;
+  // Sessions created by the wrapper store the FULL built prompt as the user
+  // message. The real instruction is inside <instruccion>; unwrap it and drop
+  // the wrapper scaffolding so the fork seed is the actual task, not our rules.
+  const instr = t.match(/<instruccion>([\s\S]*?)<\/instruccion>/i);
+  if (instr) t = instr[1];
+  return t
+    .replace(/<system_rules>[\s\S]*?<\/system_rules>/gi, ' ')
+    .replace(/<contexto_estatico>[\s\S]*?<\/contexto_estatico>/gi, ' ')
+    .replace(/<historial_relevante>[\s\S]*?<\/historial_relevante>/gi, ' ')
     .replace(/<system-reminder>[\s\S]*?<\/system-reminder>/gi, ' ')
     .replace(/<system-reminder>[\s\S]*$/i, ' ') // unterminated (truncated) reminder
     .replace(/<notification\b[\s\S]*?<\/notification>/gi, ' ')
@@ -108,7 +117,7 @@ function meaningfulUserMessages(messages) {
   for (const m of messages) {
     if (m.role !== 'user') continue;
     const cleaned = cleanUserText(m.text);
-    if (!cleaned) continue;
+    if (!cleaned || cleaned.length < 2) continue;
     if (FILLERS.has(cleaned.toLowerCase())) continue;
     out.push(cleaned);
   }

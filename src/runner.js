@@ -203,7 +203,11 @@ async function runWithAutoFix(userPrompt, context, options = {}) {
     }
   }
 
-  const success = result.code === 0 && !result.stderr && !isMaxStepsExceeded(result.stderr || result.stdout);
+  // Success is signalled by the exit code, NOT by stderr being empty: the kimi
+  // binary streams its reasoning/progress to stderr on healthy runs, so treating
+  // any stderr as failure marks correct executions as errors (and, with --fix,
+  // wastes a correction call on a run that already succeeded).
+  const success = result.code === 0 && !isMaxStepsExceeded(result.stderr || result.stdout);
 
   if (success) {
     if (cache) setCachedResponse(finalPrompt, result.stdout);
@@ -248,7 +252,7 @@ async function runWithAutoFix(userPrompt, context, options = {}) {
     console.log(prettyPrint(finalResult.stdout));
   }
 
-  if (finalResult.code === 0 && !finalResult.stderr) {
+  if (finalResult.code === 0) {
     if (cache) setCachedResponse(correctionPrompt, finalResult.stdout);
     console.log(formatSuccess('Correction applied.'));
   } else {
