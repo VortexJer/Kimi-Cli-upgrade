@@ -315,18 +315,6 @@ function showCursor() {
   }
 }
 
-function moveCursorUp(lines) {
-  if (process.stdout.isTTY && lines > 0) {
-    process.stdout.write(`\x1b[${lines}A`);
-  }
-}
-
-function clearLine() {
-  if (process.stdout.isTTY) {
-    process.stdout.write('\x1b[2K\r');
-  }
-}
-
 function buildMenuLines(sessions, selected) {
   const lines = [];
   lines.push('Select a Kimi session (Up/Down, Enter to open, Esc to cancel)');
@@ -354,18 +342,17 @@ function buildMenuLines(sessions, selected) {
 function renderMenu(sessions, selected, isUpdate = false) {
   const lines = buildMenuLines(sessions, selected);
 
+  // Build the whole frame and emit it in ONE write. Writing line-by-line makes
+  // the terminal flush (and flicker) on every line; a single write repaints the
+  // block atomically. On updates the cursor moves up to the first menu line and
+  // each line is cleared (\x1b[2K) before its new content is written.
+  let frame;
   if (isUpdate && process.stdout.isTTY) {
-    // Move cursor to the top of the menu and overwrite lines
-    moveCursorUp(lines.length);
-    for (const line of lines) {
-      clearLine();
-      process.stdout.write(line + '\n');
-    }
+    frame = `\x1b[${lines.length}A` + lines.map(l => `\x1b[2K${l}`).join('\n') + '\n';
   } else {
-    for (const line of lines) {
-      console.log(line);
-    }
+    frame = lines.join('\n') + '\n';
   }
+  process.stdout.write(frame);
 }
 
 async function interactiveSessionMenu(resumeCallback) {
