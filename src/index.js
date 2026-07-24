@@ -228,7 +228,7 @@ async function main() {
       if (r.configBackupCreated) console.log(formatSuccess('  Config oficial de Kimi respaldada.'));
       if (r.configSynced) console.log(formatSuccess('  Config oficial sincronizada con kimi1.'));
     }
-    console.log(formatInfo('Reinicia PowerShell para aplicar los cambios.'));
+    console.log(formatInfo('Reinicia tu terminal (o recarga tu perfil: source ~/.bashrc | . $PROFILE) para aplicar los cambios.'));
     return;
   }
 
@@ -242,7 +242,7 @@ async function main() {
       if (r.configRestored) console.log(formatSuccess('  Config oficial de Kimi restaurada desde backup.'));
       if (r.configReset) console.log(formatInfo('  Config oficial de Kimi reseteada a valores por defecto (no habia backup).'));
     }
-    console.log(formatInfo('Reinicia PowerShell para aplicar los cambios.'));
+    console.log(formatInfo('Reinicia tu terminal (o recarga tu perfil: source ~/.bashrc | . $PROFILE) para aplicar los cambios.'));
     return;
   }
 

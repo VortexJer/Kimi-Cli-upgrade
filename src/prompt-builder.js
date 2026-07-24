@@ -65,19 +65,21 @@ function buildPrompt(userPrompt, context, options = {}) {
 
   const parts = [];
 
-  // 1. Static system rules at the very top for potential caching
+  // 1. Static system rules at the very top for potential caching.
+  // Chat mode keeps ONLY rules that apply to a no-tools answer (terse output +
+  // code formatting). File/media/tool rules (payload guard, tool avoidance,
+  // loop budget, preview policy) are irrelevant when no tools run, so they are
+  // gated behind needsTools to cut ~90 tokens per conversational prompt.
   parts.push('<system_rules>');
   parts.push(STRICT_NO_VERBIAGE);
-  parts.push(BINARY_GUARD);
   parts.push(COMPRESSED_CODE_RULE);
-  // Tool-use rules only matter when the prompt actually needs tools. Omitting
-  // them in chat mode keeps the system prompt smaller (as the README claims).
   if (needsTools) {
+    parts.push(BINARY_GUARD);
     parts.push(TOOL_AVOIDANCE);
     parts.push(maxStepsRule());
-  }
-  if (!preview) {
-    parts.push(NO_PREVIEW_RULE);
+    if (!preview) {
+      parts.push(NO_PREVIEW_RULE);
+    }
   }
   if (autoFix) {
     parts.push(AUTO_FIX_PERSONA);

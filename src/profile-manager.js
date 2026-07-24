@@ -6,14 +6,32 @@ const CONFIG = require('./config');
 const HOME = os.homedir();
 const KIMI1_SCRIPT = path.resolve(__dirname, '..', 'bin', 'kimi1.js');
 const REDIRECT_FLAG = path.join(HOME, '.kimi-code-kimi1', 'redirect-enabled');
+const IS_WIN = os.platform() === 'win32';
 
-const PROFILE_PATHS = [
+const PS_PROFILE_PATHS = [
   path.join(HOME, 'Documents', 'PowerShell', 'Microsoft.PowerShell_profile.ps1'),
   path.join(HOME, 'Documents', 'WindowsPowerShell', 'Microsoft.PowerShell_profile.ps1')
 ];
 
+// Unix: write to whichever rc files already exist so the redirect works in the
+// user's actual shell; if none exist yet, default to ~/.bashrc.
+function unixProfilePaths() {
+  const candidates = [
+    path.join(HOME, '.zshrc'),
+    path.join(HOME, '.bashrc'),
+    path.join(HOME, '.bash_profile'),
+    path.join(HOME, '.profile')
+  ];
+  const existing = candidates.filter(p => fs.existsSync(p));
+  return existing.length ? existing : [path.join(HOME, '.bashrc')];
+}
+
+function getProfilePaths() {
+  return IS_WIN ? PS_PROFILE_PATHS : unixProfilePaths();
+}
+
 function findProfiles() {
-  return PROFILE_PATHS.filter(p => fs.existsSync(p));
+  return getProfilePaths().filter(p => fs.existsSync(p));
 }
 
 function ensureProfileDir(profilePath) {
@@ -96,6 +114,8 @@ function removeAnyKimiBlocks(profilePath) {
     const line = lines[i];
     if (line.includes('# kimi1 alias')) continue;
     if (line.includes('function kimi1')) continue;
+    if (/^\s*alias kimi1=/.test(line)) continue;      // unix alias from install.sh
+    if (/^\s*kimi1\s*\(\)\s*\{/.test(line)) continue;  // stray unix function line
     if (line.includes('KimiHistory.psm1')) continue;
     if (line.includes('Kimi session history selector')) continue;
     filtered.push(line);
@@ -162,10 +182,49 @@ function kimi {
 `;
 }
 
+// Bash/zsh equivalent of the PowerShell hybrid wrapper. Same marker so the
+// block-removal logic is shared across platforms. The real kimi binary is
+// invoked by absolute path to avoid the function recursing into itself.
+function buildUnixWrapperBlock(kimi1Script, kimiExe, flagPath) {
+  const wrapperFlags = [
+    '--history', '-h', '--list', '--list-history', '-l',
+    '--rename-sessions', '-rs', '--clean-empty', '-ce',
+    '--dry-run', '-dr', '--enable-kimi', '-e', '--disable-kimi', '-d',
+    '--restore-official-config', '-roc',
+    '--max-steps', '-ms', '--thinking', '-th',
+    '--compress', '-cp', '--cache', '-ca', '--no-context', '-nc', '--fix', '-f',
+    '--fork', '-fk', '--migrate-history', '-mh', '--compact-mode', '-cm',
+    '--uninstall', '-u', '--help', '-he', '--interactive', '-i',
+    '--resume', '-r', '--id', '-id'
+  ];
+  const cases = wrapperFlags.join('|');
+  return `
+# BEGIN kimi1 wrapper
+kimi1() { node "${kimi1Script}" "$@"; }
+kimi() {
+  if [ -f "${flagPath}" ]; then
+    node "${kimi1Script}" "$@"
+    return
+  fi
+  case "$1" in
+    ${cases})
+      node "${kimi1Script}" "$@"
+      ;;
+    *)
+      "${kimiExe}" "$@"
+      ;;
+  esac
+}
+# END kimi1 wrapper
+`;
+}
+
 function addKimiWrapper(profilePath) {
   ensureProfileDir(profilePath);
   removeAnyKimiBlocks(profilePath);
-  const block = buildKimiWrapperBlock(KIMI1_SCRIPT);
+  const block = IS_WIN
+    ? buildKimiWrapperBlock(KIMI1_SCRIPT)
+    : buildUnixWrapperBlock(KIMI1_SCRIPT, CONFIG.KIMI_EXE, REDIRECT_FLAG);
   const content = readProfile(profilePath) + block;
   writeProfile(profilePath, content);
   return true;
@@ -181,7 +240,7 @@ function enableKimiRedirect() {
   const configBackupCreated = CONFIG.backupOfficialConfig();
   const configSynced = CONFIG.syncOfficialConfigFromIsolated();
   const results = [];
-  for (const profilePath of PROFILE_PATHS) {
+  for (const profilePath of getProfilePaths()) {
     const backup = backupProfile(profilePath);
     // Ensure the wrapper is installed and clean (only one block)
     const added = hasKimiWrapper(profilePath) ? false : addKimiWrapper(profilePath);
@@ -197,7 +256,7 @@ function disableKimiRedirect() {
   const configRestored = CONFIG.restoreOfficialConfig();
   const configReset = configRestored ? false : CONFIG.resetOfficialConfigToDefaults();
   const results = [];
-  for (const profilePath of PROFILE_PATHS) {
+  for (const profilePath of getProfilePaths()) {
     const backup = backupProfile(profilePath);
     const removed = removeKimiWrapper(profilePath);
     results.push({ profilePath, backup, removed, configRestored, configReset });
@@ -207,7 +266,7 @@ function disableKimiRedirect() {
 
 function installAll() {
   const results = [];
-  for (const profilePath of PROFILE_PATHS) {
+  for (const profilePath of getProfilePaths()) {
     const backup = backupProfile(profilePath);
     const added = addKimiWrapper(profilePath);
     results.push({ profilePath, backup, added });
@@ -218,7 +277,7 @@ function installAll() {
 function uninstallAll() {
   setRedirectEnabled(false);
   const results = [];
-  for (const profilePath of PROFILE_PATHS) {
+  for (const profilePath of getProfilePaths()) {
     const backup = backupProfile(profilePath);
     const removed = removeKimiWrapper(profilePath);
     results.push({ profilePath, backup, removed });
@@ -234,5 +293,7 @@ module.exports = {
   enableKimiRedirect,
   disableKimiRedirect,
   installAll,
-  uninstallAll
+  uninstallAll,
+  buildUnixWrapperBlock,
+  buildKimiWrapperBlock
 };

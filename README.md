@@ -155,7 +155,10 @@ kimi1 --enable-kimi
 kimi1 -e
 ```
 
-Restart PowerShell after enabling/disabling.
+The `kimi` redirect is **cross-platform**: on Windows it writes a function to your
+PowerShell profile; on Linux/macOS it writes an equivalent `kimi()` shell function
+to your `~/.zshrc` / `~/.bashrc`. Restart your terminal (or `source` your profile)
+after enabling/disabling.
 
 ## Token-saving architecture
 
