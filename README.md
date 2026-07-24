@@ -6,6 +6,14 @@ A local wrapper for the official [Kimi Code CLI](https://moonshotai.github.io/ki
 
 ## Features
 
+- **Token usage dashboard**: `kimi1 --usage` reads Kimi's own `wire.jsonl` accounting to show fresh/output/cache tokens and cache-hit rate per session; every prompt-mode run prints a one-line token summary.
+- **`@file` inline references**: `@path` in a prompt inlines that file (capped, binary-skipped) so the agent doesn't spend steps discovering it.
+- **Reusable commands**: `--save-command` / `--do` / `--commands` run saved prompt templates with `$ARGUMENTS` / `$1` substitution.
+- **Git checkpoints**: every run snapshots the working dir; `--diff` reviews changes, `--undo` rolls back (with confirm).
+- **Project init & memory**: `--init` generates a `KIMI.md` from a local project scan; `--remember "..."` appends project notes.
+- **Session search & submenu**: `--search <term>` finds past sessions; the picker's Right-arrow submenu does Open / Fork / Usage / Rename / Delete.
+- **`--fast`, context meter, `--doctor`, `--config`, `--export`, `--web`, run hooks**: highspeed model, context-fill bar, health check, settings hub, native export/web, and pre/post shell hooks.
+- **Markdown output**: replies render with colored headers/bold/code and framed code blocks.
 - **Local context injection (prompt mode only)**: Auto-loads `KIMI.md`, `.ai-shared-context.md`, and `.globalcontext.md` from the current directory and sends them inside the `-p` prompt.
 - **Prompt pre-classification**: In prompt mode, `kimi1` heuristically detects whether the user is asking a question or requesting file/tool actions. If no tools are needed, it installs a shorter conversational skill and omits tool-use rules from the system prompt.
 - **Strict no-verbiage**: Forces concise, technical-only responses.
