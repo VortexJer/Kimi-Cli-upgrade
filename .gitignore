@@ -1,8 +1,8 @@
 # Dependencies
 node_modules/
-package-lock.json
 yarn.lock
 pnpm-lock.yaml
+# NOTE: package-lock.json IS committed for reproducible installs.
 
 # Backups
 *.backup-*
@@ -12,10 +12,14 @@ pnpm-lock.yaml
 .DS_Store
 Thumbs.db
 
+# Python / tooling artifacts
+__pycache__/
+*.pyc
+.venv/
+
 # Test files
 *.test.md
 /test-context/
 
 # Logs
 *.log
-.venv/

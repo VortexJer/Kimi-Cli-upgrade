@@ -8,9 +8,9 @@ const { buildPrompt } = require('./prompt-builder');
 const { uninstall } = require('./uninstall');
 const { listHistory, showSessionDetail, resumeSessionInteractive, cleanEmptySessions, renameAllSessions } = require('./history');
 const { migrateOfficialSessions } = require('./session-migrator');
-const { compactSession, compactLatestSession, compactAllSessions } = require('./session-compactor');
+const { buildForkSummary } = require('./session-fork');
 const { enableKimiRedirect, disableKimiRedirect } = require('./profile-manager');
-const { formatHeader, formatInfo, formatSuccess, createTable } = require('./formatter');
+const { formatHeader, formatInfo, formatSuccess, formatError, createTable } = require('./formatter');
 const { showMenu } = require('./menu');
 const { likelyNeedsTools } = require('./prompt-classifier');
 const { estimateTokens, formatTokenCount } = require('./token-estimator');
@@ -44,7 +44,7 @@ const SHORT_FLAGS = {
   '-np': '--no-preview',
   '-mh': '--migrate-history',
   '-cm': '--compact-mode',
-  '-cs': '--compact-session'
+  '-fk': '--fork'
 };
 
 function normalizeArgs(args) {
@@ -72,7 +72,9 @@ function showHelp() {
   console.log('  off       = no reminder');
   console.log('  safe      = remind when >24 messages or wire >1 MB');
   console.log('  aggressive= remind when >12 messages or wire >500 KB');
-  console.log('(expert/dangerous) kimi1 --compact-session (-cs) [--id <id>] [--aggressive]');
+  console.log('');
+  console.log('Fork a large session into a fresh one seeded with a local summary (0 tokens):');
+  console.log('kimi1 --fork <id> (-fk)   start a NEW session continuing an old one');
   console.log('');
   console.log('kimi1 --enable-kimi (-e)          redirect "kimi" -> "kimi1"');
   console.log('kimi1 --disable-kimi (-d)         restore original "kimi"');
@@ -121,17 +123,6 @@ function getArgValue(args, flags) {
     }
   }
   return null;
-}
-
-function removeKnownFlags(args, flags) {
-  const result = [...args];
-  for (const flag of flags) {
-    const idx = result.indexOf(flag);
-    if (idx !== -1) {
-      result.splice(idx, 2);
-    }
-  }
-  return result;
 }
 
 async function main() {
@@ -299,39 +290,37 @@ async function main() {
     return;
   }
 
-  if (args.includes('--compact-session')) {
-    console.log(formatError('WARNING: --compact-session uses manual wire.jsonl stripping and can break session resume.'));
-    const idIndex = args.indexOf('--id');
-    const aggressive = args.includes('--aggressive');
-    const opts = aggressive ? { keepMessages: 10 } : {};
-    let result;
-    if (idIndex !== -1 && args[idIndex + 1]) {
-      result = compactSession(args[idIndex + 1], opts);
-    } else {
-      result = compactLatestSession(opts);
+  if (args.includes('--fork')) {
+    const idIndex = args.indexOf('--fork');
+    const sessionId = args[idIndex + 1] && !args[idIndex + 1].startsWith('-')
+      ? args[idIndex + 1]
+      : (args.indexOf('--id') !== -1 ? args[args.indexOf('--id') + 1] : null);
+    const summary = buildForkSummary(sessionId);
+    if (!summary) {
+      console.log(formatError('No se encontro la sesion a forkear o esta vacia.'));
+      return;
     }
-    if (result.compacted) {
-      console.log(formatSuccess(
-        `Compacted: ${(result.originalSize / 1024).toFixed(1)} KB -> ${(result.newSize / 1024).toFixed(1)} KB (${result.droppedEvents} events dropped)`
-      ));
-      if (aggressive) console.log(formatInfo('Aggressive mode: only last 10 messages kept.'));
-      console.log(formatInfo(`Backup: ${result.backup}`));
-    } else {
-      console.log(formatInfo(`No compaction needed: ${result.reason}`));
-    }
+    console.log(formatHeader('Fork: nueva sesion sembrada con un resumen local (0 tokens de resumen)'));
+    console.log(formatInfo(`Resumen (${estimateTokens(summary.text)} tokens aprox.):`));
+    console.log(summary.text);
+    console.log(formatInfo(''));
+    const workDir = summary.workDir || process.cwd();
+    const context = loadContext(workDir);
+    // Fresh session (no -S): a brand new, valid wire.jsonl is created by Kimi.
+    await runWithAutoFix(summary.text, context, { fix: false, compress: false, cache: false, preview: false });
     return;
   }
 
-  const historyAliases = ['--history', '--list-history', '--interactive'];
+  const historyAliases = ['--history', '--list-history', '--list', '--interactive'];
   if (historyAliases.some(a => args.includes(a))) {
     const removed = cleanEmptySessions({ silent: true });
     if (removed > 0) {
       console.log(formatInfo(`Auto-cleaned ${removed} empty session(s).`));
     }
     const idIndex = args.indexOf('--id');
-    const resumeIndex = args.indexOf('--resume') !== -1 ? args.indexOf('--resume') : args.indexOf('-r');
+    const resumeIndex = args.indexOf('--resume');
     const interactive = args.includes('--interactive') || args.includes('--history');
-    const plainList = args.includes('--list-history');
+    const plainList = args.includes('--list-history') || args.includes('--list');
 
     if (resumeIndex !== -1 && args[resumeIndex + 1]) {
       const sessionId = args[resumeIndex + 1];
@@ -383,7 +372,7 @@ async function main() {
     const cwd = process.cwd();
     const context = noContext ? {} : loadContext(cwd);
     const needsTools = likelyNeedsTools(userPrompt);
-    const built = buildPrompt(userPrompt, context, { compress, preview });
+    const built = buildPrompt(userPrompt, context, { compress, preview, needsTools });
     const contextTokens = estimateTokens(Object.values(context).join('\n'));
     const promptTokens = estimateTokens(built);
     console.log(formatHeader('DRY RUN - Prompt que se enviaria a Kimi'));

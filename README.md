@@ -93,10 +93,9 @@ kimi1 --rename-sessions (-rs)
 # Compact reminder: warn before opening large sessions (default: off)
 kimi1 --compact-mode off|safe|aggressive (-cm)
 
-# Manual metadata stripping (expert/dangerous, can break session resume)
-kimi1 --compact-session (-cs)
-kimi1 --compact-session --id <id> (-cs -id)
-kimi1 --compact-session --aggressive  # keep only last 10 messages (high risk)
+# Fork a large session into a fresh one, seeded with a local 0-token summary.
+# The old session is never modified (unlike editing wire.jsonl, which corrupts it).
+kimi1 --fork <id> (-fk)
 
 # Dry-run without calling the API
 kimi1 --dry-run (-dr) "your prompt"
@@ -166,13 +165,12 @@ Restart PowerShell after enabling/disabling.
 | Single-shot auto-fix | At most 2 Kimi calls: initial + one correction, not a loop |
 | Thinking off by default | Disables reasoning chain, saving tokens on every call |
 | Per-turn step cap handling | Auto-resume on `max_steps_exceeded`; large tasks continue across turns |
-| History cap | Only the 3 most relevant prior messages are kept in wrapper context |
-| Prompt pre-classification | Detects conversational prompts and uses a shorter chat-mode skill without tool rules |
+| No history duplication | Prior messages are never re-sent; Kimi keeps session context server-side |
+| Prompt pre-classification | Detects conversational prompts and omits tool-use rules from the system prompt |
 | Token estimator | `--dry-run` shows estimated prompt/context tokens before calling the API |
 | Compact reminder | Warns before opening large sessions so you can run Kimi's official `/compact` |
 | Tool avoidance rule | System prompt forbids tool calls for simple questions/greetings |
 | Context minification | Local whitespace/newline compression of context files before injection |
-| Relevance pruning | Only history messages sharing keywords with the current prompt are kept |
 | Payload guard | System prompt forbids reading binary/multimedia/dependency bytes |
 | Error compression | Terminal error output is truncated to the last 20 lines |
 | No-verbiage | Strict system prompt forbids greetings, explanations, and filler text |

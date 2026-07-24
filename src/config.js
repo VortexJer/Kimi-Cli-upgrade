@@ -55,6 +55,54 @@ const KIMI_EXE = findKimiExecutable();
 const KIMI_HOME = path.join(HOME, '.kimi-code');
 const KIMI1_HOME = path.join(HOME, '.kimi-code-kimi1');
 
+// --- Section-scoped TOML helpers -------------------------------------------
+// The isolated config is edited in place. Editing keys with a plain
+// line-anchored regex (e.g. /^enabled\s*=/m) matches the FIRST occurrence in
+// ANY table, so a `[telemetry] enabled = true` above `[thinking]` would get
+// clobbered. These helpers restrict read/write to the target section only.
+
+function readTomlKey(toml, section, key) {
+  const lines = toml.split(/\r?\n/);
+  const header = `[${section}]`;
+  const keyRe = new RegExp(`^${key}\\s*=\\s*(\\S+)`);
+  let inSection = false;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed === header) { inSection = true; continue; }
+    if (inSection && /^\[.+\]$/.test(trimmed)) break; // next table
+    if (inSection) {
+      const m = trimmed.match(keyRe);
+      if (m) return m[1];
+    }
+  }
+  return null;
+}
+
+function editTomlKey(toml, section, key, value) {
+  const lines = toml.split(/\r?\n/);
+  const header = `[${section}]`;
+  const keyRe = new RegExp(`^${key}\\s*=`);
+  let sectionStart = -1;
+  let keyLineIdx = -1;
+  let inSection = false;
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    if (trimmed === header) { inSection = true; sectionStart = i; continue; }
+    if (inSection && /^\[.+\]$/.test(trimmed)) break; // next table
+    if (inSection && keyRe.test(trimmed)) { keyLineIdx = i; break; }
+  }
+  if (sectionStart === -1) {
+    const nl = toml.endsWith('\n') || toml === '' ? '' : '\n';
+    return `${toml}${nl}[${section}]\n${key} = ${value}\n`;
+  }
+  if (keyLineIdx !== -1) {
+    lines[keyLineIdx] = `${key} = ${value}`;
+  } else {
+    lines.splice(sectionStart + 1, 0, `${key} = ${value}`);
+  }
+  return lines.join('\n');
+}
+
 function copyDirRecursive(src, dst) {
   if (!fs.existsSync(dst)) fs.mkdirSync(dst, { recursive: true });
   for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
@@ -107,11 +155,7 @@ function setupKimi1Home() {
   const thinkingMarker = path.join(KIMI1_HOME, '.thinking-default-set');
   if (!fs.existsSync(thinkingMarker)) {
     let isolatedToml = fs.readFileSync(dstConfig, 'utf-8');
-    if (!/^\[thinking\]$/m.test(isolatedToml)) {
-      isolatedToml += '\n[thinking]\nenabled = false\n';
-    } else {
-      isolatedToml = isolatedToml.replace(/^enabled\s*=\s*\S.*$/m, 'enabled = false');
-    }
+    isolatedToml = editTomlKey(isolatedToml, 'thinking', 'enabled', 'false');
     fs.writeFileSync(dstConfig, isolatedToml, 'utf-8');
     fs.writeFileSync(thinkingMarker, '1', 'utf-8');
   }
@@ -168,8 +212,8 @@ const EFFECTIVE_MAX_STEPS = 5;
 function getMaxSteps() {
   const toml = readIsolatedConfig();
   if (!toml) return EFFECTIVE_MAX_STEPS;
-  const match = toml.match(/^max_steps_per_turn\s*=\s*(\d+)/m);
-  return match ? parseInt(match[1], 10) : EFFECTIVE_MAX_STEPS;
+  const val = readTomlKey(toml, 'loop_control', 'max_steps_per_turn');
+  return val && /^\d+$/.test(val) ? parseInt(val, 10) : EFFECTIVE_MAX_STEPS;
 }
 
 function applyMaxStepsToConfig(configPath, n) {
@@ -179,11 +223,7 @@ function applyMaxStepsToConfig(configPath, n) {
   } catch (err) {
     return false;
   }
-  if (!/^\[loop_control\]$/m.test(toml)) {
-    toml += `\n[loop_control]\nmax_steps_per_turn = ${n}\n`;
-  } else {
-    toml = toml.replace(/^max_steps_per_turn\s*=\s*\S.*$/m, `max_steps_per_turn = ${n}`);
-  }
+  toml = editTomlKey(toml, 'loop_control', 'max_steps_per_turn', n);
   fs.writeFileSync(configPath, toml, 'utf-8');
   return true;
 }
@@ -270,16 +310,8 @@ function resetOfficialConfigToDefaults() {
   const officialConfigPath = path.join(KIMI_HOME, 'config.toml');
   if (!fs.existsSync(officialConfigPath)) return false;
   let toml = fs.readFileSync(officialConfigPath, 'utf-8');
-  if (!/^\[loop_control\]$/m.test(toml)) {
-    toml += '\n[loop_control]\nmax_steps_per_turn = 1000\n';
-  } else {
-    toml = toml.replace(/^max_steps_per_turn\s*=\s*\S.*$/m, 'max_steps_per_turn = 1000');
-  }
-  if (!/^\[thinking\]$/m.test(toml)) {
-    toml += '\n[thinking]\nenabled = true\n';
-  } else {
-    toml = toml.replace(/^enabled\s*=\s*\S.*$/m, 'enabled = true');
-  }
+  toml = editTomlKey(toml, 'loop_control', 'max_steps_per_turn', 1000);
+  toml = editTomlKey(toml, 'thinking', 'enabled', 'true');
   fs.writeFileSync(officialConfigPath, toml, 'utf-8');
   return true;
 }
@@ -302,8 +334,7 @@ function setMaxSteps(value) {
 function getThinking() {
   const toml = readIsolatedConfig();
   if (!toml) return false;
-  const match = toml.match(/^enabled\s*=\s*(true|false)/m);
-  return match ? match[1] === 'true' : false;
+  return readTomlKey(toml, 'thinking', 'enabled') === 'true';
 }
 
 function setThinking(value) {
@@ -317,11 +348,7 @@ function setThinking(value) {
   // the kimi -> kimi1 redirect is explicitly enabled.
   const configPath = path.join(KIMI1_HOME, 'config.toml');
   let toml = fs.readFileSync(configPath, 'utf-8');
-  if (!/^\[thinking\]$/m.test(toml)) {
-    toml += `\n[thinking]\nenabled = ${bool}\n`;
-  } else {
-    toml = toml.replace(/^enabled\s*=\s*\S.*$/m, `enabled = ${bool}`);
-  }
+  toml = editTomlKey(toml, 'thinking', 'enabled', bool);
   fs.writeFileSync(configPath, toml, 'utf-8');
   return bool;
 }
@@ -346,10 +373,8 @@ const CONFIG = {
   setCompactMode,
   shouldCompact,
   PROJECT_DIR: path.join(HOME, 'kimi-cli-upgrade'),
-  MAX_RETRIES: 3,
   MAX_CONTINUATIONS: 5,
   ERROR_TAIL_LINES: 20,
-  WIRE_COMPACT_THRESHOLD_BYTES: 200 * 1024, // 200 KB
   CONTEXT_FILES: [
     'KIMI.md',
     '.ai-shared-context.md',

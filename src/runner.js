@@ -9,7 +9,6 @@ const { formatHeader, formatError, formatSuccess, formatInfo, prettyPrint } = re
 const { saveSessionTitleByPrompt } = require('./history');
 const { likelyNeedsTools } = require('./prompt-classifier');
 const { estimateTokens, formatTokenCount } = require('./token-estimator');
-const { compactSession: manualCompactSession, compactLatestSession: manualCompactLatestSession } = require('./session-compactor');
 const { getCachedResponse, setCachedResponse } = require('./response-cache');
 
 function ensureKimi1Env() {
@@ -100,8 +99,8 @@ function showCompactReminder(args) {
   console.log(formatInfo(`│  Messages: ${stats.messages} (threshold: ${thresholds.messages})`));
   console.log(formatInfo('│'));
   console.log(formatInfo('│  Tip: type /compact inside the chat to summarize old context'));
-  console.log(formatInfo('│       and reduce token usage. You can also run:'));
-  console.log(formatInfo('│       kimi1 --compact-session --id <sessionId>  (expert mode)'));
+  console.log(formatInfo('│       and reduce token usage. Or start fresh from a summary:'));
+  console.log(formatInfo('│       kimi1 --fork <sessionId>'));
   console.log(formatInfo('╰─────────────────────────────────────────────────────────────'));
   console.log(formatInfo(''));
 }
@@ -153,7 +152,7 @@ async function runWithAutoFix(userPrompt, context, options = {}) {
   const { fix = false, compress = false, cache = false, preview = false } = options;
 
   const needsTools = likelyNeedsTools(userPrompt);
-  const promptTokens = estimateTokens(buildPrompt(userPrompt, context, { compress: compress || false, preview }));
+  const promptTokens = estimateTokens(buildPrompt(userPrompt, context, { compress: compress || false, preview, needsTools }));
   const contextTokens = estimateTokens(Object.values(context).join('\n'));
 
   console.log(formatHeader('kimi1 wrapper active'));
@@ -167,7 +166,8 @@ async function runWithAutoFix(userPrompt, context, options = {}) {
 
   const finalPrompt = buildPrompt(userPrompt, context, {
     compress: compress || false,
-    preview
+    preview,
+    needsTools
   });
 
   // Optional response cache for repeated prompts.
@@ -230,11 +230,15 @@ async function runWithAutoFix(userPrompt, context, options = {}) {
   console.log(formatError('Error detected:'));
   console.log(errorSnippet);
 
+  // Do NOT compress the correction prompt: compress() collapses all whitespace
+  // to single spaces, which would flatten the error snippet and previous code
+  // into one unreadable line right when the model needs them formatted.
   const correctionPrompt = buildPrompt(userPrompt, context, {
     autoFix: true,
     previousError: errorSnippet,
     previousOutput: result.stdout,
-    compress: true
+    compress: false,
+    needsTools
   });
 
   console.log(formatInfo('Running single correction attempt...'));

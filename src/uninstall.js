@@ -19,14 +19,10 @@ function uninstall() {
     if (result.backup) {
       console.log(formatInfo(`Backup creado: ${result.backup}`));
     }
-    if (result.removedKimi) {
-      console.log(formatSuccess(`Redireccion 'kimi' eliminada de: ${result.profilePath}`));
-    }
-    if (result.removedKimi1) {
-      console.log(formatSuccess(`Alias 'kimi1' eliminado de: ${result.profilePath}`));
-    }
-    if (result.removedHistory) {
-      console.log(formatSuccess(`Selector de historial eliminado de: ${result.profilePath}`));
+    if (result.removed) {
+      console.log(formatSuccess(`Wrapper 'kimi'/'kimi1' eliminado de: ${result.profilePath}`));
+    } else {
+      console.log(formatInfo(`Sin cambios en: ${result.profilePath}`));
     }
   }
 

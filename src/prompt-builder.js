@@ -46,58 +46,11 @@ PREVIEW POLICY (token saving):
 - Focus only on writing clean, correct HTML/CSS/JS code.
 `.trim();
 
-const STOP_WORDS = new Set([
-  'the', 'a', 'an', 'and', 'or', 'but', 'is', 'are', 'was', 'were',
-  'to', 'of', 'in', 'on', 'at', 'for', 'with', 'from', 'as', 'it',
-  'this', 'that', 'these', 'those', 'you', 'i', 'we', 'they', 'he', 'she',
-  'el', 'la', 'los', 'las', 'de', 'en', 'y', 'o', 'que', 'por', 'para',
-  'con', 'del', 'al', 'un', 'una', 'como', 'su', 'se', 'es', 'son'
-]);
-
 function compress(text) {
   return text
     .replace(/\b(please|kindly|could you|would you|I need you to)\b/gi, '')
     .replace(/\s+/g, ' ')
     .trim();
-}
-
-function extractKeywords(text) {
-  const words = text.toLowerCase().match(/[a-z0-9_./\\-]+/g) || [];
-  const keywords = new Set();
-  for (const word of words) {
-    if (word.length >= 3 && !STOP_WORDS.has(word)) {
-      keywords.add(word);
-    }
-  }
-  return keywords;
-}
-
-function relevanceScore(messageKeywords, currentKeywords) {
-  if (!messageKeywords || messageKeywords.size === 0) return 0;
-  let matches = 0;
-  for (const kw of currentKeywords) {
-    if (messageKeywords.has(kw)) matches++;
-  }
-  return matches / Math.max(messageKeywords.size, currentKeywords.size);
-}
-
-function filterHistoryByRelevance(history, currentPrompt, threshold = 0.1) {
-  const currentKeywords = extractKeywords(currentPrompt);
-  if (currentKeywords.size === 0) return history;
-
-  return history.filter(msg => {
-    if (!msg.content) return false;
-    const msgKeywords = extractKeywords(msg.content);
-    const score = relevanceScore(msgKeywords, currentKeywords);
-    return score >= threshold;
-  });
-}
-
-function cleanHistory(history) {
-  return history.map(msg => ({
-    role: msg.role,
-    content: msg.content
-  }));
 }
 
 function buildPrompt(userPrompt, context, options = {}) {
@@ -106,8 +59,8 @@ function buildPrompt(userPrompt, context, options = {}) {
     previousError = null,
     previousOutput = null,
     compress: doCompress = false,
-    history = [],
-    preview = true
+    preview = true,
+    needsTools = true
   } = options;
 
   const parts = [];
@@ -117,8 +70,12 @@ function buildPrompt(userPrompt, context, options = {}) {
   parts.push(STRICT_NO_VERBIAGE);
   parts.push(BINARY_GUARD);
   parts.push(COMPRESSED_CODE_RULE);
-  parts.push(TOOL_AVOIDANCE);
-  parts.push(maxStepsRule());
+  // Tool-use rules only matter when the prompt actually needs tools. Omitting
+  // them in chat mode keeps the system prompt smaller (as the README claims).
+  if (needsTools) {
+    parts.push(TOOL_AVOIDANCE);
+    parts.push(maxStepsRule());
+  }
   if (!preview) {
     parts.push(NO_PREVIEW_RULE);
   }
@@ -135,17 +92,10 @@ function buildPrompt(userPrompt, context, options = {}) {
     parts.push('</contexto_estatico>');
   }
 
-  // 3. Filtered session history (metadata stripped), capped to save tokens
-  const relevantHistory = filterHistoryByRelevance(cleanHistory(history), userPrompt).slice(-3);
-  if (relevantHistory.length > 0) {
-    parts.push('<historial_relevante>');
-    for (const msg of relevantHistory) {
-      parts.push(`<${msg.role}>${msg.content}</${msg.role}>`);
-    }
-    parts.push('</historial_relevante>');
-  }
-
-  // 4. User instruction or auto-fix payload
+  // 3. User instruction or auto-fix payload
+  // NOTE: no session history is injected here on purpose. Kimi maintains the
+  // conversation context server-side per session, so re-sending prior messages
+  // would duplicate that context and waste tokens.
   if (autoFix && previousError) {
     parts.push('<instruccion>');
     parts.push('Previous attempt failed. Fix the error and return only the corrected command or code.');
@@ -173,4 +123,4 @@ function buildPrompt(userPrompt, context, options = {}) {
   return finalPrompt;
 }
 
-module.exports = { buildPrompt, compress, extractKeywords, filterHistoryByRelevance };
+module.exports = { buildPrompt, compress };
