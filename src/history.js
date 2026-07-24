@@ -244,6 +244,44 @@ function renameAllSessions(options = {}) {
   return renamed;
 }
 
+// Rename a single session by writing state.json (marks it as a custom title so
+// the auto-namer won't overwrite it).
+function renameSessionById(sessionDir, newTitle) {
+  const title = (newTitle || '').trim();
+  if (!title || !sessionDir) return false;
+  const statePath = path.join(sessionDir, 'state.json');
+  const state = readJsonSafe(statePath) || {};
+  state.title = title;
+  state.isCustomTitle = true;
+  try {
+    fs.writeFileSync(statePath, JSON.stringify(state, null, 2), 'utf-8');
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+// Delete a single session: remove its directory and drop it from the index.
+function deleteSessionById(sessionId) {
+  const index = readSessionIndex();
+  const entry = index.find(e => e.sessionId === sessionId);
+  const keep = index.filter(e => e.sessionId !== sessionId);
+  try {
+    if (entry && entry.sessionDir && fs.existsSync(entry.sessionDir)) {
+      fs.rmSync(entry.sessionDir, { recursive: true, force: true });
+    }
+  } catch (err) {
+    // ignore fs errors; still drop from index below
+  }
+  const content = keep.length > 0 ? keep.map(e => JSON.stringify(e)).join('\n') + '\n' : '';
+  try {
+    fs.writeFileSync(SESSION_INDEX, content, 'utf-8');
+  } catch (err) {
+    return false;
+  }
+  return true;
+}
+
 function getSessions() {
   const index = readSessionIndex();
   return index.map(entry => {
@@ -256,7 +294,8 @@ function getSessions() {
       title,
       updatedAt: state.updatedAt || state.createdAt,
       createdAt: state.createdAt,
-      workDir: entry.workDir || state.workDir
+      workDir: entry.workDir || state.workDir,
+      sessionDir: entry.sessionDir
     };
   }).sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
 }
@@ -303,60 +342,78 @@ function showSessionDetail(sessionId) {
   console.log(`\nResume: kimi -S ${match.sessionId}`);
 }
 
-function hideCursor() {
-  if (process.stdout.isTTY) {
-    process.stdout.write('\x1b[?25l');
-  }
+// --- Full-screen interactive picker ----------------------------------------
+// Rendered inside the terminal's ALTERNATE screen buffer (\x1b[?1049h), the
+// same mechanism vim/less/htop use. Every frame is painted from the home
+// position of that dedicated buffer, so the menu can never duplicate itself or
+// drift down the scrollback (the old in-place cursor-up redraw broke whenever a
+// long title wrapped, shifting the whole menu on each keypress).
+const ALT_ON = '\x1b[?1049h';
+const ALT_OFF = '\x1b[?1049l';
+const CURSOR_HOME = '\x1b[H';
+const CLEAR_EOL = '\x1b[K';
+const CLEAR_BELOW = '\x1b[J';
+
+const SESSION_ACTIONS = ['Open', 'Rename', 'Delete', 'Back'];
+
+function paint(lines) {
+  // One atomic write: home, each line cleared to EOL, then clear everything below.
+  const body = lines.map(l => CLEAR_EOL + l).join('\r\n');
+  process.stdout.write(CURSOR_HOME + body + '\r\n' + CLEAR_BELOW);
 }
 
-function showCursor() {
-  if (process.stdout.isTTY) {
-    process.stdout.write('\x1b[?25h');
-  }
-}
+function buildListLines(sessions, selected) {
+  const rows = process.stdout.rows || 24;
+  const cols = process.stdout.columns || 80;
+  const maxVisible = Math.max(3, rows - 4);
 
-function buildMenuLines(sessions, selected) {
+  let start = 0;
+  if (sessions.length > maxVisible) {
+    start = Math.min(Math.max(0, selected - Math.floor(maxVisible / 2)), sessions.length - maxVisible);
+  }
+  const end = Math.min(sessions.length, start + maxVisible);
+
+  const titleW = Math.max(18, Math.min(55, cols - 26));
   const lines = [];
-  lines.push('Select a Kimi session (Up/Down, Enter to open, Esc to cancel)');
+  lines.push('\x1b[1mKimi sessions\x1b[0m  \x1b[90m(' + sessions.length + ')\x1b[0m');
+  lines.push('\x1b[90m  Up/Down move  Enter open  Right actions  Esc quit\x1b[0m');
   lines.push('');
-
-  for (let i = 0; i < sessions.length; i++) {
+  for (let i = start; i < end; i++) {
     const s = sessions[i];
-    const isSelected = i === selected;
-    const prefix = isSelected ? '> ' : '  ';
-    const date = formatDate(s.updatedAt);
-    const title = truncate(s.title, 55);
-    const meta = `[${s.shortId}]  ${date}`;
-
-    if (isSelected) {
-      lines.push(`\x1b[32m${prefix}${title}\x1b[0m`);
+    const sel = i === selected;
+    const title = truncate(s.title, titleW).padEnd(titleW);
+    const meta = `${s.shortId}  ${formatDate(s.updatedAt)}`;
+    if (sel) {
+      lines.push(`\x1b[32m > ${title}\x1b[0m  \x1b[90m${meta}\x1b[0m`);
     } else {
-      lines.push(`${prefix}${title}`);
+      lines.push(`   ${title}  \x1b[90m${meta}\x1b[0m`);
     }
-    lines.push(`\x1b[90m   ${meta}\x1b[0m`);
   }
-
+  if (sessions.length > maxVisible) {
+    lines.push('');
+    lines.push(`\x1b[90m  ${start + 1}-${end} / ${sessions.length}\x1b[0m`);
+  }
   return lines;
 }
 
-function renderMenu(sessions, selected, isUpdate = false) {
-  const lines = buildMenuLines(sessions, selected);
-
-  // Build the whole frame and emit it in ONE write. Writing line-by-line makes
-  // the terminal flush (and flicker) on every line; a single write repaints the
-  // block atomically. On updates the cursor moves up to the first menu line and
-  // each line is cleared (\x1b[2K) before its new content is written.
-  let frame;
-  if (isUpdate && process.stdout.isTTY) {
-    frame = `\x1b[${lines.length}A` + lines.map(l => `\x1b[2K${l}`).join('\n') + '\n';
-  } else {
-    frame = lines.join('\n') + '\n';
-  }
-  process.stdout.write(frame);
+function buildActionLines(session, actionIndex) {
+  const lines = [];
+  lines.push('\x1b[1mSession\x1b[0m  \x1b[90m' + session.shortId + '\x1b[0m');
+  lines.push('  ' + truncate(session.title, 60));
+  lines.push('\x1b[90m  ' + truncate(session.workDir || '', 60) + '\x1b[0m');
+  lines.push('');
+  SESSION_ACTIONS.forEach((a, i) => {
+    const sel = i === actionIndex;
+    const label = a === 'Delete' ? `\x1b[31m${a}\x1b[0m` : a;
+    lines.push(sel ? `\x1b[7m > ${a} \x1b[0m` : `   ${label}`);
+  });
+  lines.push('');
+  lines.push('\x1b[90m  Up/Down move  Enter select  Left/Esc back\x1b[0m');
+  return lines;
 }
 
 async function interactiveSessionMenu(resumeCallback) {
-  const sessions = getSessions();
+  let sessions = getSessions();
 
   if (sessions.length === 0) {
     console.log(formatInfo('No sessions found.'));
@@ -369,57 +426,148 @@ async function interactiveSessionMenu(resumeCallback) {
   }
 
   return new Promise((resolve) => {
+    let mode = 'list';        // 'list' | 'actions' | 'confirm'
     let selected = 0;
-    let firstRender = true;
+    let actionIndex = 0;
 
     process.stdin.setRawMode(true);
     process.stdin.resume();
     process.stdin.setEncoding('utf8');
-    hideCursor();
+    process.stdout.write(ALT_ON + '\x1b[?25l'); // enter alt screen + hide cursor
 
-    renderMenu(sessions, selected, false);
-    firstRender = false;
+    function render() {
+      if (mode === 'list') {
+        paint(buildListLines(sessions, selected));
+      } else if (mode === 'actions') {
+        paint(buildActionLines(sessions[selected], actionIndex));
+      } else if (mode === 'confirm') {
+        const s = sessions[selected];
+        paint([
+          '\x1b[1;31mDelete this session?\x1b[0m',
+          '  ' + truncate(s.title, 60),
+          '\x1b[90m  ' + s.shortId + '\x1b[0m',
+          '',
+          '  Press \x1b[1my\x1b[0m to delete, any other key to cancel.'
+        ]);
+      }
+    }
 
-    function cleanup() {
-      process.stdin.setRawMode(false);
-      process.stdin.pause();
+    function teardown() {
       process.stdin.removeListener('data', onKey);
-      showCursor();
+      if (process.stdin.isTTY) process.stdin.setRawMode(false);
+      process.stdin.pause();
+      process.stdout.write('\x1b[?25h' + ALT_OFF); // show cursor + leave alt screen
+    }
+
+    function finish(fn) {
+      teardown();
+      Promise.resolve(fn && fn()).then(resolve, resolve);
+    }
+
+    function refreshSessions() {
+      sessions = getSessions();
+      if (sessions.length === 0) { finish(); return false; }
+      if (selected >= sessions.length) selected = sessions.length - 1;
+      return true;
+    }
+
+    // Read a line of text with the terminal in cooked mode (used by Rename).
+    function readLineOnce(promptText) {
+      const readline = require('readline');
+      return new Promise((res) => {
+        process.stdin.removeListener('data', onKey);
+        process.stdin.setRawMode(false);
+        process.stdout.write('\x1b[?25h');
+        const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+        rl.question(promptText, (answer) => {
+          rl.close();
+          process.stdin.setRawMode(true);
+          process.stdin.resume();
+          process.stdout.write('\x1b[?25l');
+          process.stdin.on('data', onKey);
+          res(answer);
+        });
+      });
+    }
+
+    async function runAction(action) {
+      const s = sessions[selected];
+      if (action === 'Open') {
+        finish(() => {
+          console.log(formatInfo(`Opening ${s.sessionId}...`));
+          return resumeCallback(s.sessionId);
+        });
+      } else if (action === 'Back') {
+        mode = 'list';
+        render();
+      } else if (action === 'Delete') {
+        mode = 'confirm';
+        render();
+      } else if (action === 'Rename') {
+        paint([
+          '\x1b[1mRename session\x1b[0m',
+          '\x1b[90m  ' + s.shortId + '  (current: ' + truncate(s.title, 40) + ')\x1b[0m',
+          ''
+        ]);
+        const answer = await readLineOnce('  New name: ');
+        if (answer && answer.trim()) {
+          renameSessionById(s.sessionDir, answer);
+          refreshSessions();
+        }
+        mode = 'list';
+        render();
+      }
     }
 
     async function onKey(chunk) {
       const key = chunk.toString();
 
-      if (key === '\u0003') { // Ctrl+C
-        cleanup();
-        process.exit(0);
-      }
-
-      if (key === '\u001b') { // Esc
-        cleanup();
-        console.log(formatInfo('Cancelled.'));
-        resolve();
+      if (key === '\x03') { // Ctrl+C
+        finish();
         return;
       }
 
-      if (key === '\r' || key === '\n') { // Enter
-        cleanup();
+      if (mode === 'confirm') {
+        if (key === 'y' || key === 'Y') {
+          deleteSessionById(sessions[selected].sessionId);
+          if (!refreshSessions()) return; // list emptied -> already finished
+        }
+        mode = 'list';
+        render();
+        return;
+      }
+
+      if (mode === 'actions') {
+        if (key === '\x1b[A') { actionIndex = (actionIndex - 1 + SESSION_ACTIONS.length) % SESSION_ACTIONS.length; render(); }
+        else if (key === '\x1b[B') { actionIndex = (actionIndex + 1) % SESSION_ACTIONS.length; render(); }
+        else if (key === '\x1b[D' || key === '\x1b') { mode = 'list'; render(); } // Left / Esc
+        else if (key === '\r' || key === '\n') { await runAction(SESSION_ACTIONS[actionIndex]); }
+        return;
+      }
+
+      // mode === 'list'
+      if (key === '\x1b') { // Esc -> quit
+        finish();
+      } else if (key === '\r' || key === '\n') { // Enter -> open
         const sessionId = sessions[selected].sessionId;
-        console.log(formatInfo(`Opening ${sessionId}...`));
-        await resumeCallback(sessionId);
-        resolve();
-        return;
-      }
-
-      if (key === '\u001b[A') { // Up arrow
+        finish(() => {
+          console.log(formatInfo(`Opening ${sessionId}...`));
+          return resumeCallback(sessionId);
+        });
+      } else if (key === '\x1b[C') { // Right -> actions submenu
+        actionIndex = 0;
+        mode = 'actions';
+        render();
+      } else if (key === '\x1b[A') { // Up
         selected = Math.max(0, selected - 1);
-        renderMenu(sessions, selected, true);
-      } else if (key === '\u001b[B') { // Down arrow
+        render();
+      } else if (key === '\x1b[B') { // Down
         selected = Math.min(sessions.length - 1, selected + 1);
-        renderMenu(sessions, selected, true);
+        render();
       }
     }
 
+    render();
     process.stdin.on('data', onKey);
   });
 }
@@ -537,5 +685,5 @@ async function resumeSessionInteractive(resumeCallback) {
   await interactiveSessionMenu(resumeCallback);
 }
 
-module.exports = { listHistory, showSessionDetail, resumeSessionInteractive, interactiveSessionMenu, cleanEmptySessions, saveSessionTitleByPrompt, renameAllSessions };
+module.exports = { listHistory, showSessionDetail, resumeSessionInteractive, interactiveSessionMenu, cleanEmptySessions, saveSessionTitleByPrompt, renameAllSessions, renameSessionById, deleteSessionById, getSessions };
 
