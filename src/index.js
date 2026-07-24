@@ -9,6 +9,7 @@ const { uninstall } = require('./uninstall');
 const { listHistory, showSessionDetail, resumeSessionInteractive, cleanEmptySessions, renameAllSessions, getSessions } = require('./history');
 const usage = require('./usage');
 const commands = require('./commands');
+const checkpoint = require('./checkpoint');
 const { migrateOfficialSessions } = require('./session-migrator');
 const { buildForkSummary } = require('./session-fork');
 const { enableKimiRedirect, disableKimiRedirect } = require('./profile-manager');
@@ -121,6 +122,8 @@ function showHelp() {
   console.log('kimi1 --save-command <name> "..."  save a template ($ARGUMENTS, $1, $2)');
   console.log('kimi1 --usage (-us)   token/cache usage per session + totals');
   console.log('kimi1 --tools [lean|full] (-tl)  trim per-turn tool schemas (needs kimi>=0.29)');
+  console.log('kimi1 --diff          show what changed since the last run (git)');
+  console.log('kimi1 --undo          roll the working dir back to the last checkpoint (git)');
   console.log('kimi1 --clean-empty (-ce)');
   console.log('kimi1 --rename-sessions (-rs)');
   console.log('kimi1 --migrate-history (-mh)');
@@ -314,6 +317,49 @@ async function main() {
       console.log(formatInfo('No habia backup. Configuracion oficial reseteada a max_steps=1000, thinking=true.'));
     } else {
       console.log(formatError('No se pudo restaurar la configuracion oficial.'));
+    }
+    return;
+  }
+
+  if (args.includes('--diff')) {
+    const res = checkpoint.diffSince(process.cwd());
+    if (!res.ok) {
+      console.log(formatInfo(res.reason === 'no-checkpoint'
+        ? 'No checkpoint for this directory yet (run a prompt here first).'
+        : `No diff: ${res.reason}`));
+      return;
+    }
+    console.log(formatHeader('Changes since last run'));
+    console.log(res.diff.trim() ? res.diff : formatInfo('No changes.'));
+    return;
+  }
+
+  if (args.includes('--undo')) {
+    const cwd = process.cwd();
+    const cp = checkpoint.lastCheckpoint(cwd);
+    if (!checkpoint.isGitRepo(cwd) || !cp) {
+      console.log(formatInfo('Nothing to undo (need a git repo with a prior run here).'));
+      return;
+    }
+    const readline = require('readline');
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const when = new Date(cp.ts).toLocaleString();
+    const answer = await new Promise(res =>
+      rl.question(formatError(`Restore files to the checkpoint from ${when}? Uncommitted changes since then will be lost. (y/N) `), res));
+    rl.close();
+    if (!/^y(es)?$/i.test(answer.trim())) {
+      console.log(formatInfo('Cancelled.'));
+      return;
+    }
+    const res = checkpoint.restoreLast(cwd);
+    if (!res.ok) {
+      console.log(formatError(`Undo failed: ${res.reason}`));
+      return;
+    }
+    console.log(formatSuccess('Restored to checkpoint.'));
+    if (res.newFiles.length) {
+      console.log(formatInfo(`Note: files created after the checkpoint were NOT deleted:`));
+      for (const f of res.newFiles) console.log(formatInfo(`  ${f}`));
     }
     return;
   }
@@ -544,6 +590,12 @@ async function main() {
   const files = loadFileMentions(userPrompt, cwd);
   if (files.length > 0) {
     console.log(formatInfo(`Archivos inline (@): ${files.map(f => f.path).join(', ')}`));
+  }
+
+  // Snapshot the working dir first so the run can be reviewed (--diff) or rolled
+  // back (--undo). No-op outside a git repo.
+  if (checkpoint.createCheckpoint(cwd, userPrompt)) {
+    console.log(formatInfo('Checkpoint saved (kimi1 --diff to review, --undo to roll back).'));
   }
 
   await runWithAutoFix(userPrompt, context, { fix, compress, cache, preview, fast, files });
