@@ -378,6 +378,29 @@ function getModel() {
   return m ? m[1] : null;
 }
 
+const EFFORT_LEVELS = ['low', 'high', 'max'];
+
+function getEffort() {
+  const toml = readIsolatedConfig();
+  if (!toml) return null;
+  const v = readTomlKey(toml, 'thinking', 'effort');
+  return v ? v.replace(/^"|"$/g, '') : null;
+}
+
+// Reasoning effort for models that support it (fewer tokens on 'low').
+function setEffort(value) {
+  const v = String(value).toLowerCase().trim();
+  if (!EFFORT_LEVELS.includes(v)) {
+    throw new Error(`Invalid effort: ${value}. Use one of ${EFFORT_LEVELS.join('/')}.`);
+  }
+  setupKimi1Home();
+  const configPath = path.join(KIMI1_HOME, 'config.toml');
+  let toml = fs.readFileSync(configPath, 'utf-8');
+  toml = editTomlKey(toml, 'thinking', 'effort', `"${v}"`);
+  fs.writeFileSync(configPath, toml, 'utf-8');
+  return v;
+}
+
 function setModel(alias) {
   setupKimi1Home();
   const configPath = path.join(KIMI1_HOME, 'config.toml');
@@ -435,6 +458,9 @@ const CONFIG = {
   getModel,
   setModel,
   listModels,
+  getEffort,
+  setEffort,
+  EFFORT_LEVELS,
   getDisabledTools,
   setDisabledTools,
   LEAN_DISABLED_TOOLS,

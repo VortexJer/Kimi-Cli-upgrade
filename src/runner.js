@@ -197,7 +197,7 @@ function isMaxStepsExceeded(output) {
 const CONTINUE_PROMPT = `The previous turn hit the max_steps_per_turn limit. Continue the same task from exactly where you stopped. Do not repeat work already completed. Use the prior context and proceed with the next pending action.`;
 
 async function runWithAutoFix(userPrompt, context, options = {}) {
-  const { fix = false, compress = false, cache = false, preview = false, fast = false, files = [] } = options;
+  const { fix = false, compress = false, cache = false, preview = false, fast = false, files = [], appendSystem = null } = options;
 
   const needsTools = likelyNeedsTools(userPrompt);
   // --fast forces the highspeed model. Chat-mode prompts (no tools) also default
@@ -221,7 +221,8 @@ async function runWithAutoFix(userPrompt, context, options = {}) {
     compress: compress || false,
     preview,
     needsTools,
-    files
+    files,
+    appendSystem
   });
 
   // Optional response cache for repeated prompts.

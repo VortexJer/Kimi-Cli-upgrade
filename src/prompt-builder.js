@@ -61,7 +61,8 @@ function buildPrompt(userPrompt, context, options = {}) {
     compress: doCompress = false,
     preview = true,
     needsTools = true,
-    files = []
+    files = [],
+    appendSystem = null
   } = options;
 
   const parts = [];
@@ -84,6 +85,9 @@ function buildPrompt(userPrompt, context, options = {}) {
   }
   if (autoFix) {
     parts.push(AUTO_FIX_PERSONA);
+  }
+  if (appendSystem && String(appendSystem).trim()) {
+    parts.push(String(appendSystem).trim());
   }
   parts.push('</system_rules>');
 

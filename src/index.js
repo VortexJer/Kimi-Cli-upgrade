@@ -6,7 +6,7 @@ const { loadContext, loadFileMentions } = require('./context-loader');
 const { runWithAutoFix, launchWithArgs, launchInteractive } = require('./runner');
 const { buildPrompt } = require('./prompt-builder');
 const { uninstall } = require('./uninstall');
-const { listHistory, showSessionDetail, resumeSessionInteractive, cleanEmptySessions, renameAllSessions, getSessions, searchSessions } = require('./history');
+const { listHistory, showSessionDetail, resumeSessionInteractive, cleanEmptySessions, renameAllSessions, getSessions, searchSessions, renameSessionById, deleteSessionById } = require('./history');
 const hooks = require('./hooks');
 const usage = require('./usage');
 const commands = require('./commands');
@@ -59,7 +59,8 @@ const SHORT_FLAGS = {
   '-ex': '--export',
   '-se': '--search',
   '-cfg': '--config',
-  '-mo': '--model'
+  '-mo': '--model',
+  '-ef': '--effort'
 };
 
 function fmtTokens(n) {
@@ -128,6 +129,7 @@ function showHelp() {
   H.push(`  ${P} --sessions (-s)      arrow picker (-> submenu: Open/Fork/Usage/Rename/Delete)`);
   H.push(`  ${P} --list (-l)          plain table   |   --search <term> (-se)  find by title/prompt`);
   H.push(`  ${P} --fork <id> (-fk)    fresh session seeded from a 0-token local summary`);
+  H.push(`  ${P} --rename <id> "<name>" | --rm <id>   rename / delete a session`);
   H.push(`  ${P} --clean-empty (-ce) | --rename-sessions (-rs) | --migrate-history (-mh)`);
   H.push('');
   H.push('Tokens & context:');
@@ -147,6 +149,8 @@ function showHelp() {
   H.push('Config:');
   H.push(`  ${P} --config (-cfg)      interactive settings hub`);
   H.push(`  ${P} --thinking [on|off] (-th) | --max-steps [<n>] (-ms) | --model [<alias>] (-mo)`);
+  H.push(`  ${P} --effort [low|high|max] (-ef)   reasoning effort (low = fewer tokens)`);
+  H.push(`  ${P} --append-system "<text>"        one-off addition to the system prompt`);
   H.push(`  ${P} --doctor (-doc)      health check`);
   H.push(`  ${P} --dry-run (-dr) [prompt] | --help (-h)`);
   H.push('');
@@ -573,6 +577,49 @@ async function main() {
     return;
   }
 
+  if (args.includes('--effort')) {
+    let val = getArgValue(args, ['--effort']);
+    if (!CONFIG.EFFORT_LEVELS.includes(val)) {
+      const cur = CONFIG.EFFORT_LEVELS.indexOf(CONFIG.getEffort());
+      const sel = await showMenu('Reasoning effort (low = fewer tokens):', CONFIG.EFFORT_LEVELS, cur < 0 ? 1 : cur);
+      val = CONFIG.EFFORT_LEVELS[sel < 0 ? 1 : sel];
+    }
+    CONFIG.setEffort(val);
+    console.log(formatSuccess(`thinking.effort set to ${val}`));
+    console.log(formatInfo('Applies to models that support efforts (e.g. k3). Lower = cheaper.'));
+    return;
+  }
+
+  if (args.includes('--rename')) {
+    const idx = args.indexOf('--rename');
+    const id = args[idx + 1];
+    const name = args.slice(idx + 2).join(' ').trim();
+    if (!id || !name) {
+      console.log(formatError('Usage: kimi1 --rename <id> "<new name>"'));
+      return;
+    }
+    const match = getSessions().find(s => s.sessionId === id || s.shortId === id || s.sessionId.replace('session_', '').startsWith(id));
+    if (!match) { console.log(formatError(`Session not found: ${id}`)); return; }
+    renameSessionById(match.sessionDir, name);
+    console.log(formatSuccess(`Renamed ${match.shortId} -> ${name}`));
+    return;
+  }
+
+  if (args.includes('--rm')) {
+    const id = getArgValue(args, ['--rm']);
+    if (!id) { console.log(formatError('Usage: kimi1 --rm <id>')); return; }
+    const match = getSessions().find(s => s.sessionId === id || s.shortId === id || s.sessionId.replace('session_', '').startsWith(id));
+    if (!match) { console.log(formatError(`Session not found: ${id}`)); return; }
+    const readline = require('readline');
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const answer = await new Promise(res => rl.question(formatError(`Delete "${match.title}" [${match.shortId}]? (y/N) `), res));
+    rl.close();
+    if (!/^y(es)?$/i.test(answer.trim())) { console.log(formatInfo('Cancelled.')); return; }
+    deleteSessionById(match.sessionId);
+    console.log(formatSuccess(`Deleted ${match.shortId}`));
+    return;
+  }
+
   if (args.includes('--models')) {
     const models = CONFIG.listModels();
     const cur = CONFIG.getModel();
@@ -717,7 +764,14 @@ async function main() {
   const fast = args.includes('--fast');
   // Default: no-preview (saves tokens). Use --preview to enable screenshots/PDF.
   const preview = args.includes('--preview') && !args.includes('--no-preview');
-  const stripWrapperFlags = (arr) => arr.filter(arg => !WRAPPER_FLAGS.includes(arg));
+  // --append-system "<text>": one-off addition to the system rules for this run.
+  const appendSystem = getArgValue(args, ['--append-system']);
+  const stripWrapperFlags = (arr) => {
+    const filtered = arr.filter(arg => !WRAPPER_FLAGS.includes(arg));
+    const i = filtered.indexOf('--append-system');
+    if (i !== -1) filtered.splice(i, 2); // drop the flag and its value
+    return filtered;
+  };
 
   // Remove wrapper flags from args so they don't trigger native passthrough logic.
   const cleanArgs = stripWrapperFlags(args);
@@ -730,7 +784,7 @@ async function main() {
     const context = noContext ? {} : loadContext(cwd);
     const needsTools = likelyNeedsTools(userPrompt);
     const files = loadFileMentions(userPrompt, cwd);
-    const built = buildPrompt(userPrompt, context, { compress, preview, needsTools, files });
+    const built = buildPrompt(userPrompt, context, { compress, preview, needsTools, files, appendSystem });
     const contextTokens = estimateTokens(Object.values(context).join('\n'));
     const promptTokens = estimateTokens(built);
     console.log(formatHeader('DRY RUN - Prompt que se enviaria a Kimi'));
@@ -787,7 +841,7 @@ async function main() {
     return;
   }
 
-  await runWithAutoFix(userPrompt, context, { fix, compress, cache, preview, fast, files });
+  await runWithAutoFix(userPrompt, context, { fix, compress, cache, preview, fast, files, appendSystem });
 
   hooks.runHook('post', cwd);
 }
