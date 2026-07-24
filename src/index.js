@@ -58,7 +58,8 @@ const SHORT_FLAGS = {
   '-doc': '--doctor',
   '-ex': '--export',
   '-se': '--search',
-  '-cfg': '--config'
+  '-cfg': '--config',
+  '-mo': '--model'
 };
 
 function fmtTokens(n) {
@@ -159,6 +160,7 @@ function showHelp() {
   console.log('');
   console.log('kimi1 --max-steps [<n>] (-ms)  interactive menu if no value');
   console.log('kimi1 --thinking [on|off] (-th)  interactive menu if no value');
+  console.log('kimi1 --model [<alias>] (-mo)  set default model (menu if no value); --models to list');
   console.log('');
   console.log('Note: kimi1 auto-continues a prompt when Kimi hits its per-turn');
   console.log('      max_steps limit, so large tasks still finish.');
@@ -574,22 +576,48 @@ async function main() {
   }
 
   if (args.includes('--tools')) {
-    const val = getArgValue(args, ['--tools']);
+    let val = getArgValue(args, ['--tools']);
+    if (val !== 'lean' && val !== 'full') {
+      // Bare command: open the selection menu (falls back to status in non-TTY).
+      const current = CONFIG.getDisabledTools().length ? 1 : 0;
+      const sel = await showMenu('Toolset (lean needs kimi>=0.29):', ['full - all tools', 'lean - drop rarely-used schemas'], current);
+      val = sel === 1 ? 'lean' : 'full';
+    }
     if (val === 'lean') {
       CONFIG.setDisabledTools(CONFIG.LEAN_DISABLED_TOOLS);
       console.log(formatSuccess(`Lean toolset: disabled ${CONFIG.LEAN_DISABLED_TOOLS.length} rarely-used tools.`));
-    } else if (val === 'full') {
+    } else {
       CONFIG.setDisabledTools([]);
       console.log(formatSuccess('Full toolset: no tools disabled.'));
-    } else {
-      const cur = CONFIG.getDisabledTools();
-      console.log(formatHeader('Tool trimming (per-turn fixed cost)'));
-      console.log(cur.length
-        ? `Disabled (${cur.length}): ${cur.join(', ')}`
-        : 'No tools disabled (full set).');
-      console.log(formatInfo('Use: kimi1 --tools lean   (cut ~9k tokens/turn)  |  kimi1 --tools full'));
     }
-    console.log(formatInfo('NOTE: tool trimming needs kimi >= 0.29.0. Check: kimi --version ; upgrade: kimi upgrade'));
+    console.log(formatInfo('NOTE: tool trimming needs kimi >= 0.29.0.'));
+    return;
+  }
+
+  if (args.includes('--models')) {
+    const models = CONFIG.listModels();
+    const cur = CONFIG.getModel();
+    console.log(formatHeader('Available models'));
+    for (const m of models) console.log(`  ${m === cur ? '> ' : '  '}${m}`);
+    console.log(formatInfo('Set: kimi1 --model <alias>  (or bare for a menu)'));
+    return;
+  }
+
+  if (args.includes('--model')) {
+    let alias = getArgValue(args, ['--model']);
+    const models = CONFIG.listModels();
+    if (!alias) {
+      if (models.length === 0) { console.log(formatError('No models found in config.')); return; }
+      const cur = models.indexOf(CONFIG.getModel());
+      const sel = await showMenu('Default model:', models, cur < 0 ? 0 : cur);
+      alias = models[sel < 0 ? 0 : sel];
+    }
+    if (!models.includes(alias)) {
+      console.log(formatError(`Unknown model "${alias}". See: kimi1 --models`));
+      return;
+    }
+    CONFIG.setModel(alias);
+    console.log(formatSuccess(`Default model set to ${alias}`));
     return;
   }
 

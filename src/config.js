@@ -371,6 +371,35 @@ function setDisabledTools(list) {
   return list;
 }
 
+function getModel() {
+  const toml = readIsolatedConfig();
+  if (!toml) return null;
+  const m = toml.match(/^default_model\s*=\s*"([^"]+)"/m);
+  return m ? m[1] : null;
+}
+
+function setModel(alias) {
+  setupKimi1Home();
+  const configPath = path.join(KIMI1_HOME, 'config.toml');
+  let toml = fs.readFileSync(configPath, 'utf-8');
+  if (/^default_model\s*=/m.test(toml)) {
+    toml = toml.replace(/^default_model\s*=.*$/m, `default_model = "${alias}"`);
+  } else {
+    toml = `default_model = "${alias}"\n` + toml;
+  }
+  fs.writeFileSync(configPath, toml, 'utf-8');
+  return alias;
+}
+
+function listModels() {
+  const toml = readIsolatedConfig() || '';
+  const re = /^\[models\."([^"]+)"\]/gm;
+  const out = [];
+  let m;
+  while ((m = re.exec(toml)) !== null) out.push(m[1]);
+  return out;
+}
+
 function getThinking() {
   const toml = readIsolatedConfig();
   if (!toml) return false;
@@ -403,6 +432,9 @@ const CONFIG = {
   EFFECTIVE_MAX_STEPS,
   getThinking,
   setThinking,
+  getModel,
+  setModel,
+  listModels,
   getDisabledTools,
   setDisabledTools,
   LEAN_DISABLED_TOOLS,
