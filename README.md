@@ -71,69 +71,52 @@ kimi1 --help
 
 ## Usage
 
+> After `--enable-kimi`, every command below also works with `kimi` instead of `kimi1`,
+> and `kimi1 --help` prints them with the `kimi` prefix. Native kimi commands
+> (`kimi -S`, `kimi -c`, `kimi doctor`, `kimi export`, `kimi web`, …) keep working
+> unchanged — they pass straight through to the real binary.
+
 ```powershell
-# Ask Kimi with context + auto-fix
+# Ask with local context (@file), auto-fix, and an automatic git checkpoint
 kimi1 "explain this code"
+kimi1 "fix the bug in @src/app.js"
 
-# Start Kimi interactively with local context
-kimi1
+# --- Sessions ---
+kimi1 --sessions (-s)      # arrow picker. Right arrow -> submenu:
+                           # Open / Fork / Usage / Rename / Delete
+kimi1 --list (-l)          # plain table
+kimi1 --search <term> (-se)  # find sessions by title / first prompt
+kimi1 --fork <id> (-fk)    # fresh session seeded from a 0-token local summary
+kimi1 --clean-empty (-ce) | --rename-sessions (-rs) | --migrate-history (-mh)
 
-# Resume / continue sessions
-kimi1 -S <sessionId>
-kimi1 -c
-
-# Interactive session picker with arrow keys
-# Up/Down move, Enter open, Esc cancel.
-# Right arrow -> per-session submenu: Open / Fork / Usage / Rename / Delete.
-kimi1 --sessions (-s)
-
-# Plain table of sessions
-kimi1 --list (-l)
-
-# Session details and resume by ID
-kimi1 --sessions --id <id> (-id)
-kimi1 --sessions --resume <id> (-r)
-
-# Remove empty/unused sessions (auto-cleaned when opening --sessions / --list)
-kimi1 --clean-empty (-ce)
-
-# Rename old sessions based on the first prompt (heuristic pattern rules)
-kimi1 --rename-sessions (-rs)
-
-# Compact reminder: warn before opening large sessions (default: off)
+# --- Tokens & context ---
+kimi1 --usage (-us)        # token/cache usage per session + totals
+kimi1 --fast (-fa)         # highspeed model (chat prompts use it by default)
 kimi1 --compact-mode off|safe|aggressive (-cm)
+kimi1 --tools [lean|full] (-tl)   # trim tool schemas (needs kimi >= 0.29)
+kimi1 --compress (-cp) | --cache (-ca) | --no-context (-nc)
 
-# Fork a large session into a fresh one, seeded with a local 0-token summary.
-# The old session is never modified (unlike editing wire.jsonl, which corrupts it).
-kimi1 --fork <id> (-fk)
+# --- Project & workflow ---
+kimi1 --init (-in)                 # generate KIMI.md from a project scan
+kimi1 --remember "<fact>"          # append a note to KIMI.md
+kimi1 --save-command <name> "..."  # save a prompt template ($ARGUMENTS, $1, $2)
+kimi1 --do <name> [args]           # run it   |   --commands  to list
+kimi1 --diff | --undo              # review / roll back the last run (git)
+kimi1 --hook pre|post "<cmd>" | --hooks   # shell hooks around each turn
+kimi1 --fix (-f)                   # one auto-correction retry on failure
 
-# Dry-run without calling the API
-kimi1 --dry-run (-dr) "your prompt"
-
-# Token-saving flags (opt-in)
-kimi1 --compress (-cp)
-kimi1 --cache (-ca)
-kimi1 --no-context (-nc)
-kimi1 --fix (-f)
-
-# Loop / model behavior (interactive menu if no value)
+# --- Config ---
+kimi1 --config (-cfg)              # interactive settings hub
+kimi1 --thinking [on|off] (-th)    # menu if no value
 kimi1 --max-steps <n> (-ms)
-kimi1 --thinking on|off (-th)
-
-# Redirect "kimi" to "kimi1" / restore original
-kimi1 --enable-kimi (-e)
-kimi1 --disable-kimi (-d)
-
-# Reset official Kimi config if it was modified by earlier installs
+kimi1 --model [<alias>] (-mo)      # menu if no value  |  --models  to list
+kimi1 --doctor (-doc)              # health check
+kimi1 --enable-kimi (-e) | --disable-kimi (-d)
 kimi1 --restore-official-config (-roc)
 
-# Migrate official Kimi sessions into kimi1
-kimi1 --migrate-history (-mh)
-
-# Uninstall
+# --- Misc ---
+kimi1 --dry-run (-dr) "your prompt"
 kimi1 --uninstall (-u)
-
-# Help
 kimi1 --help (-h)
 ```
 

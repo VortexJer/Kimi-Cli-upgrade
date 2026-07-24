@@ -142,7 +142,7 @@ function kimi {
     if (($KimiArgs -contains '--help') -or ($KimiArgs -contains '-h')) {
         & $kimiExe --help
         Write-Host ''
-        Write-Host 'The kimi1 wrapper adds more commands. See them with: kimi1 --help' -ForegroundColor DarkGray
+        node "${kimi1Script}" --help
         return
     }
     $redirectFlag = "${flagPath}"
