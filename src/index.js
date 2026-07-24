@@ -10,6 +10,8 @@ const { listHistory, showSessionDetail, resumeSessionInteractive, cleanEmptySess
 const usage = require('./usage');
 const commands = require('./commands');
 const checkpoint = require('./checkpoint');
+const { generateKimiMd } = require('./project-init');
+const { runDoctor } = require('./doctor');
 const { migrateOfficialSessions } = require('./session-migrator');
 const { buildForkSummary } = require('./session-fork');
 const { enableKimiRedirect, disableKimiRedirect } = require('./profile-manager');
@@ -50,7 +52,10 @@ const SHORT_FLAGS = {
   '-fk': '--fork',
   '-us': '--usage',
   '-fa': '--fast',
-  '-tl': '--tools'
+  '-tl': '--tools',
+  '-in': '--init',
+  '-doc': '--doctor',
+  '-ex': '--export'
 };
 
 function fmtTokens(n) {
@@ -116,6 +121,10 @@ function showHelp() {
   console.log('kimi1 --list (-l)     plain table of sessions');
   console.log('kimi1 --sessions --id <id> (-id)');
   console.log('kimi1 --sessions --resume <id> (-r)');
+  console.log('kimi1 --init (-in)               generate KIMI.md by scanning the project');
+  console.log('kimi1 --remember "<fact>"        append a note to KIMI.md');
+  console.log('kimi1 --doctor (-doc)            health check (kimi version, config, creds)');
+  console.log('kimi1 --export <id> (-ex)        export a session as a ZIP (native)');
   console.log('Reference files inline with @path in any prompt, e.g. kimi1 "fix @src/x.js"');
   console.log('kimi1 --do <name> [args]         run a saved prompt template');
   console.log('kimi1 --commands                 list saved commands');
@@ -318,6 +327,60 @@ async function main() {
     } else {
       console.log(formatError('No se pudo restaurar la configuracion oficial.'));
     }
+    return;
+  }
+
+  if (args.includes('--init')) {
+    const cwd = process.cwd();
+    const target = path.join(cwd, 'KIMI.md');
+    const content = generateKimiMd(cwd);
+    if (fs.existsSync(target)) {
+      const alt = path.join(cwd, 'KIMI.generated.md');
+      fs.writeFileSync(alt, content, 'utf-8');
+      console.log(formatInfo(`KIMI.md already exists — wrote ${alt} instead (review and merge).`));
+    } else {
+      fs.writeFileSync(target, content, 'utf-8');
+      console.log(formatSuccess(`Created ${target}`));
+    }
+    console.log(formatInfo('This file is auto-injected as context in prompt mode.'));
+    return;
+  }
+
+  if (args.includes('--remember')) {
+    const idx = args.indexOf('--remember');
+    const fact = args.slice(idx + 1).join(' ').trim();
+    if (!fact) {
+      console.log(formatError('Usage: kimi1 --remember "<fact to add to KIMI.md>"'));
+      return;
+    }
+    const cwd = process.cwd();
+    const target = path.join(cwd, 'KIMI.md');
+    let md = fs.existsSync(target) ? fs.readFileSync(target, 'utf-8') : `# ${path.basename(cwd)}\n\n## Notes\n`;
+    if (!/^##\s+Notes\s*$/m.test(md)) md += '\n## Notes\n';
+    md = md.replace(/(^##\s+Notes\s*$)/m, `$1\n- ${fact}`);
+    fs.writeFileSync(target, md, 'utf-8');
+    console.log(formatSuccess(`Remembered in ${target}`));
+    return;
+  }
+
+  if (args.includes('--doctor')) {
+    const chalk = require('chalk');
+    console.log(formatHeader('kimi1 doctor'));
+    const colors = { ok: chalk.green, warn: chalk.yellow, error: chalk.red, info: chalk.gray };
+    const tags = { ok: 'OK  ', warn: 'WARN', error: 'ERR ', info: '··  ' };
+    for (const c of runDoctor()) {
+      const paint = colors[c.level] || chalk.gray;
+      console.log(`${paint('[' + (tags[c.level] || '··  ') + ']')} ${c.name.padEnd(24)} ${c.value}`);
+    }
+    return;
+  }
+
+  if (args.includes('--export')) {
+    const idx = args.indexOf('--export');
+    const rest = args.slice(idx + 1).filter(a => a);
+    const cwd = process.cwd();
+    const context = loadContext(cwd);
+    await launchWithArgs(['export', ...rest], context);
     return;
   }
 

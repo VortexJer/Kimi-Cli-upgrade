@@ -35,59 +35,40 @@ function prettyPrintJSON(text) {
   }
 }
 
-function normalizeIndentation(lines) {
-  // Detect base indentation from first non-empty line
-  let baseIndent = Infinity;
-  for (const line of lines) {
-    if (line.trim() === '') continue;
-    const match = line.match(/^(\s*)/);
-    const indent = match ? match[1].length : 0;
-    if (indent < baseIndent) baseIndent = indent;
-  }
-  if (baseIndent === Infinity) baseIndent = 0;
-
-  return lines.map(line => {
-    if (line.trim() === '') return '';
-    return line.substring(Math.min(baseIndent, line.length));
-  });
+// Light-touch inline markdown: headers, bold, inline code, bullets.
+function renderInline(line) {
+  const h = line.match(/^(#{1,6})\s+(.*)$/);
+  if (h) return chalk.bold.cyan(h[2]);
+  let out = line.replace(/^(\s*)[-*]\s+/, (_, s) => s + chalk.cyan('• '));
+  out = out.replace(/\*\*([^*]+)\*\*/g, (_, t) => chalk.bold(t));
+  out = out.replace(/`([^`]+)`/g, (_, t) => chalk.yellow(t));
+  return out;
 }
 
-function prettyPrintCodeBlock(code, language) {
-  const lower = (language || '').toLowerCase();
-
-  if (lower === 'json') {
-    return prettyPrintJSON(code);
-  }
-
-  // General normalization: trim trailing spaces, normalize indentation
-  const lines = code.split(/\r?\n/);
-  const normalized = normalizeIndentation(lines);
-  return normalized.join('\n').trim();
-}
-
+// Render Kimi's markdown-ish output: colorized inline elements and fenced code
+// blocks framed with a dim border + language label (JSON blocks pretty-printed).
 function prettyPrint(text) {
-  // Match code blocks: ```lang\ncode\n```
-  const codeBlockRegex = /```(\w*)\n([\s\S]*?)\n```/g;
-  let result = text;
-  let match;
-  const replacements = [];
-
-  while ((match = codeBlockRegex.exec(text)) !== null) {
-    const [fullBlock, language, code] = match;
-    const formatted = prettyPrintCodeBlock(code, language);
-    replacements.push({ fullBlock, language, formatted });
-  }
-
-  // Apply replacements from end to start to preserve indices
-  for (let i = replacements.length - 1; i >= 0; i--) {
-    const { fullBlock, language, formatted } = replacements[i];
-    const start = text.lastIndexOf(fullBlock);
-    if (start !== -1) {
-      result = result.substring(0, start) + '```' + language + '\n' + formatted + '\n```' + result.substring(start + fullBlock.length);
+  if (typeof text !== 'string' || !text) return text;
+  const parts = text.split('```');
+  const out = [];
+  for (let i = 0; i < parts.length; i++) {
+    if (i % 2 === 1) {
+      const seg = parts[i].replace(/^\n/, '');
+      const nl = seg.indexOf('\n');
+      const firstTok = nl > -1 ? seg.slice(0, nl).trim() : seg.trim();
+      const hasLang = firstTok.length > 0 && !/\s/.test(firstTok) && firstTok.length < 20;
+      const lang = hasLang ? firstTok : '';
+      let body = hasLang && nl > -1 ? seg.slice(nl + 1) : seg;
+      if (lang.toLowerCase() === 'json') body = prettyPrintJSON(body.trim()) + '\n';
+      const label = lang || 'code';
+      out.push(chalk.gray('┌─ ' + label + ' ' + '─'.repeat(Math.max(2, 42 - label.length))));
+      for (const l of body.replace(/\n$/, '').split('\n')) out.push(chalk.gray('│ ') + l);
+      out.push(chalk.gray('└' + '─'.repeat(44)));
+    } else {
+      for (const l of parts[i].split('\n')) out.push(renderInline(l));
     }
   }
-
-  return result;
+  return out.join('\n');
 }
 
 module.exports = { formatHeader, formatError, formatSuccess, formatInfo, createTable, prettyPrint, prettyPrintJSON };
