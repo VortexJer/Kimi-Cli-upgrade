@@ -6,7 +6,8 @@ const { loadContext, loadFileMentions } = require('./context-loader');
 const { runWithAutoFix, launchWithArgs, launchInteractive } = require('./runner');
 const { buildPrompt } = require('./prompt-builder');
 const { uninstall } = require('./uninstall');
-const { listHistory, showSessionDetail, resumeSessionInteractive, cleanEmptySessions, renameAllSessions, getSessions } = require('./history');
+const { listHistory, showSessionDetail, resumeSessionInteractive, cleanEmptySessions, renameAllSessions, getSessions, searchSessions } = require('./history');
+const hooks = require('./hooks');
 const usage = require('./usage');
 const commands = require('./commands');
 const checkpoint = require('./checkpoint');
@@ -55,7 +56,8 @@ const SHORT_FLAGS = {
   '-tl': '--tools',
   '-in': '--init',
   '-doc': '--doctor',
-  '-ex': '--export'
+  '-ex': '--export',
+  '-se': '--search'
 };
 
 function fmtTokens(n) {
@@ -121,6 +123,9 @@ function showHelp() {
   console.log('kimi1 --list (-l)     plain table of sessions');
   console.log('kimi1 --sessions --id <id> (-id)');
   console.log('kimi1 --sessions --resume <id> (-r)');
+  console.log('kimi1 --search <term> (-se)      find sessions by title/first prompt');
+  console.log('kimi1 --web                      open Kimi web UI (native)');
+  console.log('kimi1 --hooks | --hook pre|post "<cmd>"  run a shell cmd before/after each turn');
   console.log('kimi1 --init (-in)               generate KIMI.md by scanning the project');
   console.log('kimi1 --remember "<fact>"        append a note to KIMI.md');
   console.log('kimi1 --doctor (-doc)            health check (kimi version, config, creds)');
@@ -327,6 +332,51 @@ async function main() {
     } else {
       console.log(formatError('No se pudo restaurar la configuracion oficial.'));
     }
+    return;
+  }
+
+  if (args.includes('--search')) {
+    const idx = args.indexOf('--search');
+    const term = args.slice(idx + 1).filter(a => !a.startsWith('-')).join(' ');
+    if (!term) {
+      console.log(formatError('Usage: kimi1 --search <term>'));
+      return;
+    }
+    const results = searchSessions(term);
+    console.log(formatHeader(`Search: "${term}"  (${results.length} match${results.length === 1 ? '' : 'es'})`));
+    for (const r of results.slice(0, 25)) {
+      console.log(`  ${r.title.slice(0, 40).padEnd(40)} ${formatInfo(r.shortId)}`);
+      if (r.snippet) console.log(formatInfo(`     ${r.snippet}`));
+    }
+    if (results.length) console.log(formatInfo('Open: kimi -S <id>'));
+    return;
+  }
+
+  if (args.includes('--web')) {
+    const cwd = process.cwd();
+    await launchWithArgs(['web', ...args.slice(args.indexOf('--web') + 1).filter(a => a)], loadContext(cwd));
+    return;
+  }
+
+  if (args.includes('--hooks')) {
+    const h = hooks.loadHooks();
+    console.log(formatHeader('Run hooks'));
+    console.log(`  pre:  ${h.pre || formatInfo('(none)')}`);
+    console.log(`  post: ${h.post || formatInfo('(none)')}`);
+    console.log(formatInfo('Set: kimi1 --hook pre|post "<shell command>"  (empty to clear)'));
+    return;
+  }
+
+  if (args.includes('--hook')) {
+    const idx = args.indexOf('--hook');
+    const type = args[idx + 1];
+    const cmd = args.slice(idx + 2).join(' ');
+    if (type !== 'pre' && type !== 'post') {
+      console.log(formatError('Usage: kimi1 --hook pre|post "<shell command>"'));
+      return;
+    }
+    hooks.setHook(type, cmd);
+    console.log(formatSuccess(cmd ? `${type}-hook set: ${cmd}` : `${type}-hook cleared`));
     return;
   }
 
@@ -676,7 +726,14 @@ async function main() {
     console.log(formatInfo('Checkpoint saved (kimi1 --diff to review, --undo to roll back).'));
   }
 
+  if (!hooks.runHook('pre', cwd)) {
+    console.log(formatError('pre-hook failed (non-zero exit). Aborting run.'));
+    return;
+  }
+
   await runWithAutoFix(userPrompt, context, { fix, compress, cache, preview, fast, files });
+
+  hooks.runHook('post', cwd);
 }
 
 main().catch(err => {

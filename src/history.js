@@ -283,6 +283,27 @@ function deleteSessionById(sessionId) {
   return true;
 }
 
+// Search sessions by title AND first prompt (case-insensitive). Returns matches
+// with a short snippet around the hit — the "find that old conversation" UI.
+function searchSessions(term) {
+  const t = (term || '').toLowerCase().trim();
+  if (!t) return [];
+  const out = [];
+  for (const s of getSessions()) {
+    const first = readFirstPrompt(s.sessionDir) || '';
+    const hayTitle = s.title.toLowerCase().includes(t);
+    const idx = first.toLowerCase().indexOf(t);
+    if (!hayTitle && idx === -1) continue;
+    let snippet = '';
+    if (idx !== -1) {
+      const start = Math.max(0, idx - 25);
+      snippet = (start > 0 ? '…' : '') + first.slice(start, idx + t.length + 35).replace(/\s+/g, ' ').trim() + '…';
+    }
+    out.push({ ...s, snippet });
+  }
+  return out;
+}
+
 function getSessions() {
   const index = readSessionIndex();
   return index.map(entry => {
@@ -733,5 +754,5 @@ async function resumeSessionInteractive(handlers) {
   await interactiveSessionMenu(handlers);
 }
 
-module.exports = { listHistory, showSessionDetail, resumeSessionInteractive, interactiveSessionMenu, cleanEmptySessions, saveSessionTitleByPrompt, renameAllSessions, renameSessionById, deleteSessionById, getSessions };
+module.exports = { listHistory, showSessionDetail, resumeSessionInteractive, interactiveSessionMenu, cleanEmptySessions, saveSessionTitleByPrompt, renameAllSessions, renameSessionById, deleteSessionById, getSessions, searchSessions };
 
