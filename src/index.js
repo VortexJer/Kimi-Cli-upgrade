@@ -46,7 +46,9 @@ const SHORT_FLAGS = {
   '-mh': '--migrate-history',
   '-cm': '--compact-mode',
   '-fk': '--fork',
-  '-us': '--usage'
+  '-us': '--usage',
+  '-fa': '--fast',
+  '-tl': '--tools'
 };
 
 function fmtTokens(n) {
@@ -113,6 +115,7 @@ function showHelp() {
   console.log('kimi1 --sessions --id <id> (-id)');
   console.log('kimi1 --sessions --resume <id> (-r)');
   console.log('kimi1 --usage (-us)   token/cache usage per session + totals');
+  console.log('kimi1 --tools [lean|full] (-tl)  trim per-turn tool schemas (needs kimi>=0.29)');
   console.log('kimi1 --clean-empty (-ce)');
   console.log('kimi1 --rename-sessions (-rs)');
   console.log('kimi1 --migrate-history (-mh)');
@@ -141,6 +144,7 @@ function showHelp() {
   console.log('kimi1 --cache (-ca)           cache identical prompts');
   console.log('kimi1 --no-context (-nc)      skip KIMI.md/shared context');
   console.log('kimi1 --fix (-f)              enable single auto-correction retry');
+  console.log('kimi1 --fast (-fa)           use the highspeed model (chat prompts use it by default)');
   console.log('kimi1 --preview (-pr)         allow screenshots/PDF previews (more tokens)');
   console.log('kimi1 --no-preview (default)  skip visual previews to save tokens');
   console.log('');
@@ -314,6 +318,26 @@ async function main() {
     return;
   }
 
+  if (args.includes('--tools')) {
+    const val = getArgValue(args, ['--tools']);
+    if (val === 'lean') {
+      CONFIG.setDisabledTools(CONFIG.LEAN_DISABLED_TOOLS);
+      console.log(formatSuccess(`Lean toolset: disabled ${CONFIG.LEAN_DISABLED_TOOLS.length} rarely-used tools.`));
+    } else if (val === 'full') {
+      CONFIG.setDisabledTools([]);
+      console.log(formatSuccess('Full toolset: no tools disabled.'));
+    } else {
+      const cur = CONFIG.getDisabledTools();
+      console.log(formatHeader('Tool trimming (per-turn fixed cost)'));
+      console.log(cur.length
+        ? `Disabled (${cur.length}): ${cur.join(', ')}`
+        : 'No tools disabled (full set).');
+      console.log(formatInfo('Use: kimi1 --tools lean   (cut ~9k tokens/turn)  |  kimi1 --tools full'));
+    }
+    console.log(formatInfo('NOTE: tool trimming needs kimi >= 0.29.0. Check: kimi --version ; upgrade: kimi upgrade'));
+    return;
+  }
+
   if (args.includes('--clean-empty')) {
     cleanEmptySessions();
     return;
@@ -408,11 +432,12 @@ async function main() {
   }
 
   // Wrapper-only flags (do not reach Kimi's binary)
-  const WRAPPER_FLAGS = ['--compress', '--cache', '--no-context', '--fix', '--preview', '--no-preview'];
+  const WRAPPER_FLAGS = ['--compress', '--cache', '--no-context', '--fix', '--preview', '--no-preview', '--fast'];
   const compress = args.includes('--compress');
   const cache = args.includes('--cache');
   const noContext = args.includes('--no-context');
   const fix = args.includes('--fix');
+  const fast = args.includes('--fast');
   // Default: no-preview (saves tokens). Use --preview to enable screenshots/PDF.
   const preview = args.includes('--preview') && !args.includes('--no-preview');
   const stripWrapperFlags = (arr) => arr.filter(arg => !WRAPPER_FLAGS.includes(arg));
@@ -463,7 +488,7 @@ async function main() {
     console.log(formatInfo(`Contexto cargado desde: ${Object.keys(context).join(', ')}`));
   }
 
-  await runWithAutoFix(userPrompt, context, { fix, compress, cache, preview });
+  await runWithAutoFix(userPrompt, context, { fix, compress, cache, preview, fast });
 }
 
 main().catch(err => {

@@ -97,6 +97,29 @@ function analyzeWire(wirePath) {
   return { sizeMB, messages };
 }
 
+// Show how full the context window is for the session being opened, so the user
+// knows before spending a turn on a near-full context. Read from the wire; cheap
+// (one session).
+function showContextMeter(args) {
+  const sessionId = getArgValue(args, ['-S', '--session']);
+  const wireInfo = sessionId
+    ? findSessionWire(sessionId)
+    : (args.includes('-c') || args.includes('--continue') ? findSessionWire(null) : null);
+  if (!wireInfo) return;
+  const { used, max, fraction } = usage.contextFill(wireInfo.wirePath, CONFIG.MODEL_MAX_CONTEXT);
+  if (used === 0) return;
+  const width = 20;
+  const filled = Math.min(width, Math.round(fraction * width));
+  const bar = '█'.repeat(filled) + '░'.repeat(width - filled);
+  const pct = Math.round(fraction * 100);
+  const warn = fraction >= 0.85;
+  const line = `context [${bar}] ${pct}%  (${fmtTok(used)}/${fmtTok(max)})`;
+  console.log(warn ? formatError(line) : formatInfo(line));
+  if (warn) {
+    console.log(formatInfo('  Near full — consider /compact inside the chat or: kimi1 --fork ' + (sessionId || '<id>')));
+  }
+}
+
 function showCompactReminder(args) {
   const mode = CONFIG.getCompactMode();
   if (mode === CONFIG.COMPACT_MODES.OFF) return;
@@ -129,11 +152,12 @@ function showCompactReminder(args) {
   console.log(formatInfo(''));
 }
 
-function runKimi(prompt, sessionId = null) {
+function runKimi(prompt, sessionId = null, model = null) {
   return new Promise((resolve) => {
+    const base = model ? ['-m', model] : [];
     const args = sessionId
-      ? ['-S', sessionId, '-p', prompt, '--output-format', 'text']
-      : ['-p', prompt, '--output-format', 'text'];
+      ? [...base, '-S', sessionId, '-p', prompt, '--output-format', 'text']
+      : [...base, '-p', prompt, '--output-format', 'text'];
     const child = spawn(CONFIG.KIMI_EXE, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
@@ -173,14 +197,19 @@ function isMaxStepsExceeded(output) {
 const CONTINUE_PROMPT = `The previous turn hit the max_steps_per_turn limit. Continue the same task from exactly where you stopped. Do not repeat work already completed. Use the prior context and proceed with the next pending action.`;
 
 async function runWithAutoFix(userPrompt, context, options = {}) {
-  const { fix = false, compress = false, cache = false, preview = false } = options;
+  const { fix = false, compress = false, cache = false, preview = false, fast = false } = options;
 
   const needsTools = likelyNeedsTools(userPrompt);
+  // --fast forces the highspeed model. Chat-mode prompts (no tools) also default
+  // to highspeed since they don't need the heavier coding model. Either can be
+  // the driver; tools mode keeps the default model unless --fast is explicit.
+  const useFast = fast || !needsTools;
+  const model = useFast ? CONFIG.FAST_MODEL : null;
   const promptTokens = estimateTokens(buildPrompt(userPrompt, context, { compress: compress || false, preview, needsTools }));
   const contextTokens = estimateTokens(Object.values(context).join('\n'));
 
   console.log(formatHeader('kimi1 wrapper active'));
-  console.log(formatInfo(`Mode: ${needsTools ? 'tools' : 'chat'} | Context: ${formatTokenCount(contextTokens)} tokens | Prompt: ${formatTokenCount(promptTokens)} tokens | Preview: ${preview ? 'on' : 'off'}`));
+  console.log(formatInfo(`Mode: ${needsTools ? 'tools' : 'chat'} | Model: ${useFast ? 'highspeed' : 'default'} | Context: ${formatTokenCount(contextTokens)} tokens | Prompt: ${formatTokenCount(promptTokens)} tokens | Preview: ${preview ? 'on' : 'off'}`));
 
   // Install the right skill flavour before Kimi reads it.
   installSkill({ needsTools });
@@ -205,7 +234,7 @@ async function runWithAutoFix(userPrompt, context, options = {}) {
   }
 
   // 1. Single attempt
-  let result = await runKimi(finalPrompt);
+  let result = await runKimi(finalPrompt, null, model);
   let sessionId = extractSessionId(result.stdout || '');
   if (result.stdout) {
     console.log(prettyPrint(result.stdout));
@@ -220,7 +249,7 @@ async function runWithAutoFix(userPrompt, context, options = {}) {
       console.log(formatError('Could not extract session ID for continuation.'));
       break;
     }
-    result = await runKimi(CONTINUE_PROMPT, sessionId);
+    result = await runKimi(CONTINUE_PROMPT, sessionId, model);
     sessionId = extractSessionId(result.stdout || '') || sessionId;
     if (result.stdout) {
       console.log(prettyPrint(result.stdout));
@@ -271,7 +300,7 @@ async function runWithAutoFix(userPrompt, context, options = {}) {
   });
 
   console.log(formatInfo('Running single correction attempt...'));
-  const finalResult = await runKimi(correctionPrompt, sessionId);
+  const finalResult = await runKimi(correctionPrompt, sessionId, model);
 
   if (finalResult.stdout) {
     console.log(prettyPrint(finalResult.stdout));
@@ -314,6 +343,7 @@ async function launchWithArgs(args, context) {
   // We cannot auto-trigger Kimi's /compact from outside the TUI; the user must
   // type it inside the interactive session.
   if (isContinuation(args)) {
+    showContextMeter(args);
     showCompactReminder(args);
   }
 

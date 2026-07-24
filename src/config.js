@@ -146,6 +146,8 @@ function setupKimi1Home() {
     toml = editTomlKey(toml, 'loop_control', 'max_retries_per_step', 1);
     toml = editTomlKey(toml, 'loop_control', 'reserved_context_size', 8192);
     toml = editTomlKey(toml, 'thinking', 'enabled', 'false');
+    // Trim the per-turn fixed cost: drop rarely-used tool schemas (media/web/plan).
+    toml = editTomlKey(toml, 'tools', 'disabled', tomlStringArray(LEAN_DISABLED_TOOLS));
     fs.writeFileSync(dstConfig, toml, 'utf-8');
   }
 
@@ -320,6 +322,54 @@ function setMaxSteps(value) {
   return n;
 }
 
+// Tools disabled by default to shrink the per-turn fixed cost. Each tool's JSON
+// schema is sent to the model on EVERY turn (~18k tokens for the full 26-tool
+// set in kimi 0.28). Disabling the ones a local coding workflow rarely needs
+// removes their schemas from the request. NOTE: the [tools] config is only
+// honored by kimi >= 0.29.0 — on older binaries this is a harmless no-op.
+// The heavy, rarely-needed schemas: Cron* (~12KB), Goal/Budget* (~6KB),
+// AgentSwarm, media/web/plan tools, and AskUserQuestion (useless in -p mode).
+// Kept on: Read, Write, Edit, Grep, Glob, Bash, Agent, Task*, TodoList, Skill.
+const LEAN_DISABLED_TOOLS = [
+  'ReadMediaFile', 'FetchURL', 'WebSearch',
+  'EnterPlanMode', 'ExitPlanMode', 'AskUserQuestion',
+  'CronCreate', 'CronList', 'CronDelete',
+  'CreateGoal', 'GetGoal', 'SetGoalBudget', 'UpdateGoal',
+  'AgentSwarm'
+];
+
+function tomlStringArray(list) {
+  return '[' + list.map(s => `"${s}"`).join(', ') + ']';
+}
+
+function getDisabledTools() {
+  const toml = readIsolatedConfig();
+  if (!toml) return [];
+  const lines = toml.split(/\r?\n/);
+  let inTools = false;
+  for (const line of lines) {
+    const t = line.trim();
+    if (t === '[tools]') { inTools = true; continue; }
+    if (inTools && /^\[.+\]$/.test(t)) break;
+    if (inTools) {
+      const m = t.match(/^disabled\s*=\s*(\[[^\]]*\])/);
+      if (m) {
+        try { return JSON.parse(m[1]); } catch { return []; }
+      }
+    }
+  }
+  return [];
+}
+
+function setDisabledTools(list) {
+  setupKimi1Home();
+  const configPath = path.join(KIMI1_HOME, 'config.toml');
+  let toml = fs.readFileSync(configPath, 'utf-8');
+  toml = editTomlKey(toml, 'tools', 'disabled', tomlStringArray(list));
+  fs.writeFileSync(configPath, toml, 'utf-8');
+  return list;
+}
+
 function getThinking() {
   const toml = readIsolatedConfig();
   if (!toml) return false;
@@ -352,6 +402,9 @@ const CONFIG = {
   EFFECTIVE_MAX_STEPS,
   getThinking,
   setThinking,
+  getDisabledTools,
+  setDisabledTools,
+  LEAN_DISABLED_TOOLS,
   backupOfficialConfig,
   restoreOfficialConfig,
   syncOfficialConfigFromIsolated,
@@ -362,6 +415,8 @@ const CONFIG = {
   setCompactMode,
   shouldCompact,
   PROJECT_DIR: path.join(HOME, 'kimi-cli-upgrade'),
+  FAST_MODEL: 'kimi-code/kimi-for-coding-highspeed',
+  MODEL_MAX_CONTEXT: 262144,
   MAX_CONTINUATIONS: 5,
   ERROR_TAIL_LINES: 20,
   CONTEXT_FILES: [
