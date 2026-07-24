@@ -96,14 +96,14 @@ function tokenize(text) {
 }
 
 const TITLE_RULES = [
-  { pattern: /(?:mejora|mejorar|upgrade|modificar|actualizar).*kimi/i, title: 'Mejora el CLI de Kimi' },
-  { pattern: /(?:continuar|contin[uú]e|resume).*sesi[oó]n/i, title: 'Continuar sesión anterior' },
-  { pattern: /(?:historial|history).*chat/i, title: 'Historial de chats en Kimi' },
-  { pattern: /claude/i, title: 'Importar chats de Claude Code' },
-  { pattern: /(?:tabla|table).*lenguaje/i, title: 'Tabla de lenguajes de programación' },
-  { pattern: /(?:script|scraper).*(?:enter|tecla|pulsador)/i, title: 'Pulsador automático de Enter' },
-  { pattern: /(?:script|scraper)/i, title: 'Script personalizado' },
-  { pattern: /(?:tabla|table)/i, title: 'Tabla informativa' }
+  { pattern: /(?:mejora|mejorar|upgrade|modificar|actualizar).*kimi/i, title: 'Improve the Kimi CLI' },
+  { pattern: /(?:continuar|contin[uú]e|resume).*sesi[oó]n/i, title: 'Resume previous session' },
+  { pattern: /(?:historial|history).*chat/i, title: 'Kimi chat history' },
+  { pattern: /claude/i, title: 'Import Claude Code chats' },
+  { pattern: /(?:tabla|table).*lenguaje/i, title: 'Programming languages table' },
+  { pattern: /(?:script|scraper).*(?:enter|tecla|pulsador)/i, title: 'Automatic Enter presser' },
+  { pattern: /(?:script|scraper)/i, title: 'Custom script' },
+  { pattern: /(?:tabla|table)/i, title: 'Info table' }
 ];
 
 function applyTitleRules(prompt) {
@@ -114,7 +114,7 @@ function applyTitleRules(prompt) {
 }
 
 function extractLocalTitle(prompt) {
-  if (!prompt) return 'Nueva sesión';
+  if (!prompt) return 'New session';
 
   const ruleTitle = applyTitleRules(prompt);
   if (ruleTitle) return ruleTitle;
@@ -133,7 +133,7 @@ function extractLocalTitle(prompt) {
     .slice(0, 6);
 
   if (words.length === 0) {
-    return truncate(clean, 40) || 'Nueva sesión';
+    return truncate(clean, 40) || 'New session';
   }
 
   const title = words

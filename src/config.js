@@ -311,7 +311,7 @@ function resetOfficialConfigToDefaults() {
 function setMaxSteps(value) {
   const n = parseInt(value, 10);
   if (!Number.isFinite(n) || n < 1) {
-    throw new Error(`Valor invalido para max_steps_per_turn: ${value}. Debe ser un entero >= 1.`);
+    throw new Error(`Invalid max_steps_per_turn: ${value}. Must be an integer >= 1.`);
   }
   setupKimi1Home();
 
@@ -409,7 +409,7 @@ function getThinking() {
 function setThinking(value) {
   const normalized = String(value).toLowerCase().trim();
   if (!['true', 'false', 'on', 'off', '1', '0'].includes(normalized)) {
-    throw new Error(`Valor invalido para thinking.enabled: ${value}. Usa true/false.`);
+    throw new Error(`Invalid thinking.enabled: ${value}. Use true/false.`);
   }
   const bool = ['true', 'on', '1'].includes(normalized);
   setupKimi1Home();

@@ -228,7 +228,7 @@ async function runWithAutoFix(userPrompt, context, options = {}) {
   if (cache) {
     const cached = getCachedResponse(finalPrompt);
     if (cached) {
-      console.log(formatInfo('Respuesta recuperada de cache.'));
+      console.log(formatInfo('Response from cache.'));
       console.log(prettyPrint(cached));
       return;
     }
@@ -320,18 +320,24 @@ async function runWithAutoFix(userPrompt, context, options = {}) {
 
 function showSplash() {
   return new Promise(resolve => {
+    const box = [
+      '╔═══════════════════════════════════════════╗',
+      '║                                           ║',
+      '║         K I M I 1   A C T I V E           ║',
+      '║                                           ║',
+      '╚═══════════════════════════════════════════╝'
+    ];
+    const cols = process.stdout.columns || 80;
+    const rows = process.stdout.rows || 24;
+    const padX = ' '.repeat(Math.max(0, Math.floor((cols - box[0].length) / 2)));
+    const padY = Math.max(0, Math.floor((rows - box.length) / 2) - 1);
     console.clear();
-    console.log('\n\n');
-    console.log(chalk.cyan.bold('  ╔═══════════════════════════════════════════╗'));
-    console.log(chalk.cyan.bold('  ║                                           ║'));
-    console.log(chalk.cyan.bold('  ║         K I M I 1   A C T I V E           ║'));
-    console.log(chalk.cyan.bold('  ║                                           ║'));
-    console.log(chalk.cyan.bold('  ╚═══════════════════════════════════════════╝'));
-    console.log('\n');
+    if (padY > 0) process.stdout.write('\n'.repeat(padY));
+    for (const line of box) console.log(padX + chalk.cyan.bold(line));
     setTimeout(() => {
       console.clear();
       resolve();
-    }, 1000);
+    }, 900);
   });
 }
 

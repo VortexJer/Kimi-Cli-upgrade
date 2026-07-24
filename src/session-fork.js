@@ -144,15 +144,15 @@ function buildForkSummary(sessionId, opts = {}) {
   const tail = userMsgs.slice(1).slice(-tailMessages);
 
   const parts = [];
-  parts.push('Continuas una tarea de una sesion previa. No repitas trabajo ya hecho.');
-  parts.push(`Objetivo original: ${truncate(goal, 400)}`);
+  parts.push('You are continuing a task from a previous session. Do not repeat work already done.');
+  parts.push(`Original goal: ${truncate(goal, 400)}`);
   if (tail.length > 0) {
-    parts.push('Instrucciones posteriores del usuario (resumen local, puede faltar detalle):');
+    parts.push('Later user instructions (local summary, some detail may be missing):');
     for (const t of tail) {
       parts.push(`- ${truncate(t, 220)}`);
     }
   }
-  parts.push('Continua desde el ultimo punto pendiente.');
+  parts.push('Continue from the last pending point.');
 
   return {
     text: parts.join('\n'),

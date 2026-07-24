@@ -9,38 +9,38 @@ function uninstall() {
   console.log(formatHeader('kimi1 uninstall'));
 
   if (restoreOfficialConfig()) {
-    console.log(formatSuccess('Configuracion oficial de Kimi restaurada desde backup.'));
+    console.log(formatSuccess('Official Kimi config restored from backup.'));
   } else {
-    console.log(formatInfo('No se encontro backup de la configuracion oficial.'));
+    console.log(formatInfo('No official config backup found.'));
   }
 
   const results = uninstallAll();
   for (const result of results) {
     if (result.backup) {
-      console.log(formatInfo(`Backup creado: ${result.backup}`));
+      console.log(formatInfo(`Backup created: ${result.backup}`));
     }
     if (result.removed) {
-      console.log(formatSuccess(`Wrapper 'kimi'/'kimi1' eliminado de: ${result.profilePath}`));
+      console.log(formatSuccess(`Wrapper 'kimi'/'kimi1' removed from: ${result.profilePath}`));
     } else {
-      console.log(formatInfo(`Sin cambios en: ${result.profilePath}`));
+      console.log(formatInfo(`No changes in: ${result.profilePath}`));
     }
   }
 
   const projectDir = path.join(os.homedir(), 'kimi-cli-upgrade');
   if (fs.existsSync(projectDir)) {
     fs.rmSync(projectDir, { recursive: true, force: true });
-    console.log(formatSuccess(`Directorio del proyecto eliminado: ${projectDir}`));
+    console.log(formatSuccess(`Project directory removed: ${projectDir}`));
   } else {
-    console.log(formatInfo('Directorio del proyecto no encontrado.'));
+    console.log(formatInfo('Project directory not found.'));
   }
 
   const isolatedHome = path.join(os.homedir(), '.kimi-code-kimi1');
   if (fs.existsSync(isolatedHome)) {
     fs.rmSync(isolatedHome, { recursive: true, force: true });
-    console.log(formatSuccess(`Home aislado de kimi1 eliminado: ${isolatedHome}`));
+    console.log(formatSuccess(`kimi1 isolated home removed: ${isolatedHome}`));
   }
 
-  console.log(formatSuccess('Desinstalacion completa. Reinicia tu sesion de PowerShell.'));
+  console.log(formatSuccess('Uninstall complete. Restart your PowerShell session.'));
 }
 
 module.exports = { uninstall };

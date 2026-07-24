@@ -212,7 +212,7 @@ async function main() {
         console.log(formatInfo(`Set to ${requested}.`));
         console.log(formatInfo(`Warning: official Kimi binary has been observed to cap at ${CONFIG.EFFECTIVE_MAX_STEPS}; higher values may be ignored.`));
       } else {
-        console.log(formatSuccess(`max_steps_per_turn ajustado a ${requested}`));
+        console.log(formatSuccess(`max_steps_per_turn set to ${requested}`));
       }
     } else {
       const current = CONFIG.getMaxSteps();
@@ -238,7 +238,7 @@ async function main() {
         console.log(formatInfo(`Set to ${requested}.`));
         console.log(formatInfo(`Warning: official Kimi binary has been observed to cap at ${CONFIG.EFFECTIVE_MAX_STEPS}; higher values may be ignored.`));
       } else {
-        console.log(formatSuccess(`max_steps_per_turn ajustado a ${requested}`));
+        console.log(formatSuccess(`max_steps_per_turn set to ${requested}`));
       }
     }
     return;
@@ -249,7 +249,7 @@ async function main() {
     const val = args[thinkingIdx + 1];
     if (val && /^(true|false|on|off|1|0)$/i.test(val)) {
       const bool = CONFIG.setThinking(val);
-      console.log(formatSuccess(`thinking.enabled ajustado a ${bool}`));
+      console.log(formatSuccess(`thinking.enabled set to ${bool}`));
     } else {
       const current = CONFIG.getThinking();
       const thinkingOptions = [
@@ -258,16 +258,16 @@ async function main() {
       ];
       const selected = await showMenu('Choose thinking mode:', thinkingOptions, current ? 1 : 0);
       const bool = CONFIG.setThinking(selected === 1 ? 'true' : 'false');
-      console.log(formatSuccess(`thinking.enabled ajustado a ${bool}`));
+      console.log(formatSuccess(`thinking.enabled set to ${bool}`));
     }
     return;
   }
 
   if (args.includes('--migrate-history')) {
     const result = migrateOfficialSessions();
-    console.log(formatInfo(`Sesiones oficiales migradas: ${result.migrated}`));
+    console.log(formatInfo(`Official sessions migrated: ${result.migrated}`));
     if (result.skipped > 0) {
-      console.log(formatInfo(`Sesiones ya presentes en kimi1: ${result.skipped}`));
+      console.log(formatInfo(`Already present in kimi1: ${result.skipped}`));
     }
     return;
   }
@@ -279,29 +279,29 @@ async function main() {
 
   if (args.includes('--enable-kimi')) {
     const results = enableKimiRedirect();
-    console.log(formatHeader('Redireccion "kimi" -> "kimi1" activada'));
+    console.log(formatHeader('Redirect "kimi" -> "kimi1" enabled'));
     for (const r of results) {
       console.log(formatInfo(r.profilePath));
-      if (r.backup) console.log(formatInfo(`  Backup perfil: ${r.backup}`));
-      console.log(r.added ? formatSuccess('  Redireccion anadida.') : formatInfo('  Ya existia.'));
-      if (r.configBackupCreated) console.log(formatSuccess('  Config oficial de Kimi respaldada.'));
-      if (r.configSynced) console.log(formatSuccess('  Config oficial sincronizada con kimi1.'));
+      if (r.backup) console.log(formatInfo(`  Profile backup: ${r.backup}`));
+      console.log(r.added ? formatSuccess('  Redirect added.') : formatInfo('  Already present.'));
+      if (r.configBackupCreated) console.log(formatSuccess('  Official Kimi config backed up.'));
+      if (r.configSynced) console.log(formatSuccess('  Official config synced with kimi1.'));
     }
-    console.log(formatInfo('Reinicia tu terminal (o recarga tu perfil: source ~/.bashrc | . $PROFILE) para aplicar los cambios.'));
+    console.log(formatInfo('Restart your terminal (or reload your profile: source ~/.bashrc | . $PROFILE) to apply.'));
     return;
   }
 
   if (args.includes('--disable-kimi')) {
     const results = disableKimiRedirect();
-    console.log(formatHeader('Redireccion "kimi" -> "kimi1" desactivada'));
+    console.log(formatHeader('Redirect "kimi" -> "kimi1" disabled'));
     for (const r of results) {
       console.log(formatInfo(r.profilePath));
-      if (r.backup) console.log(formatInfo(`  Backup perfil: ${r.backup}`));
-      console.log(r.removed ? formatSuccess('  Redireccion eliminada.') : formatInfo('  No estaba activa.'));
-      if (r.configRestored) console.log(formatSuccess('  Config oficial de Kimi restaurada desde backup.'));
-      if (r.configReset) console.log(formatInfo('  Config oficial de Kimi reseteada a valores por defecto (no habia backup).'));
+      if (r.backup) console.log(formatInfo(`  Profile backup: ${r.backup}`));
+      console.log(r.removed ? formatSuccess('  Redirect removed.') : formatInfo('  Was not active.'));
+      if (r.configRestored) console.log(formatSuccess('  Official Kimi config restored from backup.'));
+      if (r.configReset) console.log(formatInfo('  Official Kimi config reset to defaults (no backup found).'));
     }
-    console.log(formatInfo('Reinicia tu terminal (o recarga tu perfil: source ~/.bashrc | . $PROFILE) para aplicar los cambios.'));
+    console.log(formatInfo('Restart your terminal (or reload your profile: source ~/.bashrc | . $PROFILE) to apply.'));
     return;
   }
 
@@ -309,11 +309,11 @@ async function main() {
     const restored = CONFIG.restoreOfficialConfig();
     const reset = restored ? false : CONFIG.resetOfficialConfigToDefaults();
     if (restored) {
-      console.log(formatSuccess('Configuracion oficial de Kimi restaurada desde backup.'));
+      console.log(formatSuccess('Official Kimi config restored from backup.'));
     } else if (reset) {
-      console.log(formatInfo('No habia backup. Configuracion oficial reseteada a max_steps=1000, thinking=true.'));
+      console.log(formatInfo('No backup found. Official config reset to max_steps=1000, thinking=true.'));
     } else {
-      console.log(formatError('No se pudo restaurar la configuracion oficial.'));
+      console.log(formatError('Could not restore the official config.'));
     }
     return;
   }
@@ -638,10 +638,10 @@ async function main() {
       : (args.indexOf('--id') !== -1 ? args[args.indexOf('--id') + 1] : null);
     const summary = buildForkSummary(sessionId);
     if (!summary) {
-      console.log(formatError('No se encontro la sesion a forkear o esta vacia.'));
+      console.log(formatError('Session to fork not found or empty.'));
       return;
     }
-    console.log(formatHeader('Fork: nueva sesion sembrada con un resumen local (0 tokens de resumen)'));
+    console.log(formatHeader('Fork: new session seeded with a local summary (0 summary tokens)'));
     console.log(formatInfo(`Resumen (${estimateTokens(summary.text)} tokens aprox.):`));
     console.log(summary.text);
     console.log(formatInfo(''));
@@ -768,12 +768,12 @@ async function main() {
   const context = noContext ? {} : loadContext(cwd);
 
   if (Object.keys(context).length > 0) {
-    console.log(formatInfo(`Contexto cargado desde: ${Object.keys(context).join(', ')}`));
+    console.log(formatInfo(`Context loaded from: ${Object.keys(context).join(', ')}`));
   }
 
   const files = loadFileMentions(userPrompt, cwd);
   if (files.length > 0) {
-    console.log(formatInfo(`Archivos inline (@): ${files.map(f => f.path).join(', ')}`));
+    console.log(formatInfo(`Inline files (@): ${files.map(f => f.path).join(', ')}`));
   }
 
   // Snapshot the working dir first so the run can be reviewed (--diff) or rolled
