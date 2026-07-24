@@ -75,7 +75,8 @@ kimi1 -S <sessionId>
 kimi1 -c
 
 # Interactive session picker with arrow keys
-# (Up/Down move, Enter open, Right arrow -> per-session submenu, Esc cancel)
+# Up/Down move, Enter open, Esc cancel.
+# Right arrow -> per-session submenu: Open / Fork / Usage / Rename / Delete.
 kimi1 --sessions (-s)
 
 # Plain table of sessions

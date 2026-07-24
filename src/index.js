@@ -505,10 +505,25 @@ async function main() {
       const context = loadContext(workDir);
       await launchWithArgs(['-S', sessionId], context);
     } else if (interactive && !plainList) {
-      await resumeSessionInteractive((sessionId) => {
-        const workDir = findSessionWorkDir(sessionId) || process.cwd();
-        const context = loadContext(workDir);
-        return launchWithArgs(['-S', sessionId], context);
+      await resumeSessionInteractive({
+        open: (sessionId) => {
+          const workDir = findSessionWorkDir(sessionId) || process.cwd();
+          const context = loadContext(workDir);
+          return launchWithArgs(['-S', sessionId], context);
+        },
+        fork: (sessionId) => {
+          const summary = buildForkSummary(sessionId);
+          if (!summary) {
+            console.log(formatError('Could not fork: session empty or not found.'));
+            return;
+          }
+          const workDir = summary.workDir || process.cwd();
+          const context = loadContext(workDir);
+          console.log(formatInfo(`Fork seed (${estimateTokens(summary.text)} tokens):`));
+          console.log(summary.text);
+          console.log(formatInfo(''));
+          return runWithAutoFix(summary.text, context, { fix: false, compress: false, cache: false, preview: false });
+        }
       });
     } else if (idIndex !== -1 && args[idIndex + 1]) {
       showSessionDetail(args[idIndex + 1]);

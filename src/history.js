@@ -3,6 +3,7 @@ const path = require('path');
 const os = require('os');
 const { spawnSync } = require('child_process');
 const CONFIG = require('./config');
+const usage = require('./usage');
 const { formatHeader, formatInfo, formatSuccess, createTable } = require('./formatter');
 
 const SESSION_INDEX = path.join(CONFIG.KIMI1_HOME, 'session_index.jsonl');
@@ -354,7 +355,32 @@ const CURSOR_HOME = '\x1b[H';
 const CLEAR_EOL = '\x1b[K';
 const CLEAR_BELOW = '\x1b[J';
 
-const SESSION_ACTIONS = ['Open', 'Rename', 'Delete', 'Back'];
+const SESSION_ACTIONS = ['Open', 'Fork', 'Usage', 'Rename', 'Delete', 'Back'];
+
+function fmtTok(n) {
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k';
+  return String(n);
+}
+
+function buildUsageLines(session) {
+  const wire = path.join(session.sessionDir || '', 'agents', 'main', 'wire.jsonl');
+  const { totals } = usage.parseWireUsage(wire);
+  const ctx = usage.contextFill(wire, CONFIG.MODEL_MAX_CONTEXT);
+  const hit = Math.round(usage.cacheHitRate(totals) * 100);
+  return [
+    '\x1b[1mUsage\x1b[0m  \x1b[90m' + session.shortId + '\x1b[0m',
+    '  ' + truncate(session.title, 60),
+    '',
+    `  Turns:        ${totals.turns}`,
+    `  Input fresh:  ${fmtTok(totals.inputOther)}`,
+    `  Output:       ${fmtTok(totals.output)}`,
+    `  Cache read:   ${fmtTok(totals.cacheRead)}  (${hit}% hit)`,
+    `  Context now:  ${fmtTok(ctx.used)} / ${fmtTok(ctx.max)}  (${Math.round(ctx.fraction * 100)}%)`,
+    '',
+    '\x1b[90m  Any key to go back\x1b[0m'
+  ];
+}
 
 function paint(lines) {
   // One atomic write: home, each line cleared to EOL, then clear everything below.
@@ -412,7 +438,12 @@ function buildActionLines(session, actionIndex) {
   return lines;
 }
 
-async function interactiveSessionMenu(resumeCallback) {
+async function interactiveSessionMenu(handlers) {
+  // handlers: { open(sessionId), fork(sessionId) }. Back-compat: a bare function
+  // is treated as the open handler.
+  if (typeof handlers === 'function') handlers = { open: handlers };
+  const openCb = handlers.open;
+  const forkCb = handlers.fork;
   let sessions = getSessions();
 
   if (sessions.length === 0) {
@@ -422,7 +453,7 @@ async function interactiveSessionMenu(resumeCallback) {
 
   // Fallback for non-TTY environments (pipes, CI, etc.)
   if (!process.stdin.isTTY) {
-    return fallbackMenu(sessions, resumeCallback);
+    return fallbackMenu(sessions, openCb);
   }
 
   return new Promise((resolve) => {
@@ -449,6 +480,8 @@ async function interactiveSessionMenu(resumeCallback) {
           '',
           '  Press \x1b[1my\x1b[0m to delete, any other key to cancel.'
         ]);
+      } else if (mode === 'usage') {
+        paint(buildUsageLines(sessions[selected]));
       }
     }
 
@@ -495,8 +528,17 @@ async function interactiveSessionMenu(resumeCallback) {
       if (action === 'Open') {
         finish(() => {
           console.log(formatInfo(`Opening ${s.sessionId}...`));
-          return resumeCallback(s.sessionId);
+          return openCb(s.sessionId);
         });
+      } else if (action === 'Fork') {
+        if (!forkCb) { mode = 'list'; render(); return; }
+        finish(() => {
+          console.log(formatInfo(`Forking ${s.sessionId} into a fresh session...`));
+          return forkCb(s.sessionId);
+        });
+      } else if (action === 'Usage') {
+        mode = 'usage';
+        render();
       } else if (action === 'Back') {
         mode = 'list';
         render();
@@ -527,6 +569,12 @@ async function interactiveSessionMenu(resumeCallback) {
         return;
       }
 
+      if (mode === 'usage') {
+        mode = 'actions';
+        render();
+        return;
+      }
+
       if (mode === 'confirm') {
         if (key === 'y' || key === 'Y') {
           deleteSessionById(sessions[selected].sessionId);
@@ -552,7 +600,7 @@ async function interactiveSessionMenu(resumeCallback) {
         const sessionId = sessions[selected].sessionId;
         finish(() => {
           console.log(formatInfo(`Opening ${sessionId}...`));
-          return resumeCallback(sessionId);
+          return openCb(sessionId);
         });
       } else if (key === '\x1b[C') { // Right -> actions submenu
         actionIndex = 0;
@@ -681,8 +729,8 @@ function cleanEmptySessions(options = {}) {
   return remove.length;
 }
 
-async function resumeSessionInteractive(resumeCallback) {
-  await interactiveSessionMenu(resumeCallback);
+async function resumeSessionInteractive(handlers) {
+  await interactiveSessionMenu(handlers);
 }
 
 module.exports = { listHistory, showSessionDetail, resumeSessionInteractive, interactiveSessionMenu, cleanEmptySessions, saveSessionTitleByPrompt, renameAllSessions, renameSessionById, deleteSessionById, getSessions };
