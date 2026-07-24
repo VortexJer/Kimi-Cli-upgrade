@@ -130,34 +130,23 @@ function setupKimi1Home() {
     fs.mkdirSync(path.join(KIMI1_HOME, d), { recursive: true });
   }
 
-  // config.toml: copy from official home and enforce loop_control limits
+  // config.toml: SEED ONCE from the official config, then it becomes the
+  // wrapper's own file. It is deliberately NOT re-copied when the official
+  // config changes: an mtime-based re-copy would silently clobber the wrapper's
+  // token-saving settings (thinking off, low max_steps) every time the official
+  // kimi touched its config. To pull in new official models/providers later,
+  // delete the isolated config or run --restore-official-config.
   const srcConfig = path.join(KIMI_HOME, 'config.toml');
   const dstConfig = path.join(KIMI1_HOME, 'config.toml');
-  if (shouldCopy(srcConfig, dstConfig)) {
+  if (!fs.existsSync(dstConfig) && fs.existsSync(srcConfig)) {
     let toml = fs.readFileSync(srcConfig, 'utf-8');
-    if (!/^\[loop_control\]$/m.test(toml)) {
-      toml += '\n[loop_control]\nmax_steps_per_turn = 5\nmax_retries_per_step = 1\nreserved_context_size = 8192\n';
-    } else {
-      // Preserve user's max_steps choice (do not downgrade); only ensure values exist.
-      if (!/^max_steps_per_turn\s*=/m.test(toml)) {
-        toml = toml.replace(/^\[loop_control\]$/m, '[loop_control]\nmax_steps_per_turn = 5');
-      }
-      toml = toml.replace(/^max_retries_per_step\s*=\s*\S.*$/m, 'max_retries_per_step = 1');
-      if (!/^reserved_context_size\s*=/m.test(toml)) {
-        toml = toml.replace(/^(\[loop_control\][\s\S]*?)(?=\n\[|\n*$)/, '$1reserved_context_size = 8192\n');
-      }
-    }
+    // Token-saving defaults, applied once at seed time. User overrides via
+    // --max-steps / --thinking persist afterwards (never clobbered).
+    toml = editTomlKey(toml, 'loop_control', 'max_steps_per_turn', 5);
+    toml = editTomlKey(toml, 'loop_control', 'max_retries_per_step', 1);
+    toml = editTomlKey(toml, 'loop_control', 'reserved_context_size', 8192);
+    toml = editTomlKey(toml, 'thinking', 'enabled', 'false');
     fs.writeFileSync(dstConfig, toml, 'utf-8');
-  }
-
-  // thinking: default to off to save tokens; user can re-enable with --thinking on.
-  // Only apply the default once via a marker so explicit user changes are preserved.
-  const thinkingMarker = path.join(KIMI1_HOME, '.thinking-default-set');
-  if (!fs.existsSync(thinkingMarker)) {
-    let isolatedToml = fs.readFileSync(dstConfig, 'utf-8');
-    isolatedToml = editTomlKey(isolatedToml, 'thinking', 'enabled', 'false');
-    fs.writeFileSync(dstConfig, isolatedToml, 'utf-8');
-    fs.writeFileSync(thinkingMarker, '1', 'utf-8');
   }
 
   // tui.toml: keep UI settings consistent
