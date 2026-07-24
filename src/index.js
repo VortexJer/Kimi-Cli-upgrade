@@ -177,6 +177,9 @@ function showHelp() {
   console.log('kimi1 --dry-run (-dr) [prompt]');
   console.log('kimi1 --uninstall (-u)');
   console.log('kimi1 --help (-h)');
+  console.log('');
+  console.log('Native kimi commands pass through unchanged: kimi doctor | export | login |');
+  console.log('web | vis | provider | migrate | upgrade, and native flags. See: kimi --help');
 }
 
 function findSessionWorkDir(sessionId) {
@@ -768,10 +771,15 @@ async function main() {
     return;
   }
 
-  // Any other native Kimi flag or subcommand (export, vis, provider, etc.)
-  // Treat as native passthrough but with local context injected.
-  // A plain word is treated as a prompt below unless it starts with '-'.
-  if (cleanArgs.length > 0 && cleanArgs[0].startsWith('-')) {
+  // Native Kimi subcommands and flags pass straight through to the real binary,
+  // so that even under the `kimi -> kimi1` redirect, `kimi doctor`, `kimi export`,
+  // `kimi login`, `kimi web`, session flags, etc. keep working. Without this, a
+  // bare subcommand like `export` would be mistaken for a prompt.
+  const NATIVE_SUBCOMMANDS = new Set([
+    'export', 'provider', 'acp', 'web', 'server', 'login',
+    'doctor', 'vis', 'migrate', 'upgrade', 'update'
+  ]);
+  if (cleanArgs.length > 0 && (cleanArgs[0].startsWith('-') || NATIVE_SUBCOMMANDS.has(cleanArgs[0].toLowerCase()))) {
     const cwd = process.cwd();
     const context = loadContext(cwd);
     await launchWithArgs(args, context);

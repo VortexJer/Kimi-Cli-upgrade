@@ -142,7 +142,7 @@ function kimi {
     if (($KimiArgs -contains '--help') -or ($KimiArgs -contains '-h')) {
         & $kimiExe --help
         Write-Host ''
-        node "${kimi1Script}" --help
+        Write-Host 'The kimi1 wrapper adds more commands. See them with: kimi1 --help' -ForegroundColor DarkGray
         return
     }
     $redirectFlag = "${flagPath}"
@@ -242,8 +242,10 @@ function enableKimiRedirect() {
   const results = [];
   for (const profilePath of getProfilePaths()) {
     const backup = backupProfile(profilePath);
-    // Ensure the wrapper is installed and clean (only one block)
-    const added = hasKimiWrapper(profilePath) ? false : addKimiWrapper(profilePath);
+    // Always (re)install a fresh block. addKimiWrapper removes any prior block
+    // first, so re-running --enable-kimi upgrades an outdated wrapper instead of
+    // leaving a stale one in place.
+    const added = addKimiWrapper(profilePath);
     results.push({ profilePath, backup, added, configBackupCreated, configSynced });
   }
   return results;
