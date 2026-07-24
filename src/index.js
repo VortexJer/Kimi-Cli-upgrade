@@ -57,7 +57,8 @@ const SHORT_FLAGS = {
   '-in': '--init',
   '-doc': '--doctor',
   '-ex': '--export',
-  '-se': '--search'
+  '-se': '--search',
+  '-cfg': '--config'
 };
 
 function fmtTokens(n) {
@@ -128,6 +129,7 @@ function showHelp() {
   console.log('kimi1 --hooks | --hook pre|post "<cmd>"  run a shell cmd before/after each turn');
   console.log('kimi1 --init (-in)               generate KIMI.md by scanning the project');
   console.log('kimi1 --remember "<fact>"        append a note to KIMI.md');
+  console.log('kimi1 --config (-cfg)            interactive settings (thinking/steps/compact/tools)');
   console.log('kimi1 --doctor (-doc)            health check (kimi version, config, creds)');
   console.log('kimi1 --export <id> (-ex)        export a session as a ZIP (native)');
   console.log('Reference files inline with @path in any prompt, e.g. kimi1 "fix @src/x.js"');
@@ -410,6 +412,48 @@ async function main() {
     md = md.replace(/(^##\s+Notes\s*$)/m, `$1\n- ${fact}`);
     fs.writeFileSync(target, md, 'utf-8');
     console.log(formatSuccess(`Remembered in ${target}`));
+    return;
+  }
+
+  if (args.includes('--config')) {
+    const toolsLabel = () => (CONFIG.getDisabledTools().length ? 'lean' : 'full');
+    if (!process.stdin.isTTY) {
+      console.log(formatHeader('kimi1 config'));
+      console.log(`  thinking:          ${CONFIG.getThinking() ? 'on' : 'off'}`);
+      console.log(`  max_steps_per_turn: ${CONFIG.getMaxSteps()}`);
+      console.log(`  compact reminder:  ${CONFIG.getCompactMode()}`);
+      console.log(`  tools:             ${toolsLabel()}`);
+      console.log(formatInfo('Run in a terminal to edit interactively.'));
+      return;
+    }
+    let done = false;
+    while (!done) {
+      const opts = [
+        `Thinking            (${CONFIG.getThinking() ? 'on' : 'off'})`,
+        `Max steps per turn  (${CONFIG.getMaxSteps()})`,
+        `Compact reminder    (${CONFIG.getCompactMode()})`,
+        `Tools               (${toolsLabel()})`,
+        'Done'
+      ];
+      const c = await showMenu('kimi1 config — pick a setting to change', opts, 0);
+      if (c === 4 || c < 0) { done = true; break; }
+      if (c === 0) {
+        const v = await showMenu('Thinking', ['off (fewer tokens)', 'on'], CONFIG.getThinking() ? 1 : 0);
+        CONFIG.setThinking(v === 1 ? 'true' : 'false');
+      } else if (c === 1) {
+        const vals = [3, 5, 10, 1000];
+        const v = await showMenu('Max steps per turn', ['3', '5', '10', 'unlimited'], 1);
+        CONFIG.setMaxSteps(vals[v < 0 ? 1 : v]);
+      } else if (c === 2) {
+        const vals = ['off', 'safe', 'aggressive'];
+        const v = await showMenu('Compact reminder', vals, vals.indexOf(CONFIG.getCompactMode()));
+        CONFIG.setCompactMode(vals[v < 0 ? 0 : v]);
+      } else if (c === 3) {
+        const v = await showMenu('Tools (lean needs kimi>=0.29)', ['full', 'lean'], CONFIG.getDisabledTools().length ? 1 : 0);
+        CONFIG.setDisabledTools(v === 1 ? CONFIG.LEAN_DISABLED_TOOLS : []);
+      }
+    }
+    console.log(formatSuccess('Config saved.'));
     return;
   }
 
