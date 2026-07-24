@@ -10,6 +10,30 @@ const { saveSessionTitleByPrompt } = require('./history');
 const { likelyNeedsTools } = require('./prompt-classifier');
 const { estimateTokens, formatTokenCount } = require('./token-estimator');
 const { getCachedResponse, setCachedResponse } = require('./response-cache');
+const usage = require('./usage');
+
+function fmtTok(n) {
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k';
+  return String(n);
+}
+
+// One-line token summary of the turn(s) just run, read from the session wire.
+function printRunUsage(sessionId) {
+  try {
+    const wire = findSessionWire(sessionId);
+    if (!wire) return;
+    const { lastTurn } = usage.parseWireUsage(wire.wirePath);
+    const inp = usage.inputTotal(lastTurn);
+    if (inp === 0 && lastTurn.output === 0) return;
+    const hit = inp > 0 ? Math.round((lastTurn.cacheRead / inp) * 100) : 0;
+    console.log(formatInfo(
+      `▸ ${fmtTok(lastTurn.inputOther)} in · ${fmtTok(lastTurn.output)} out · ${fmtTok(lastTurn.cacheRead)} cache (${hit}% hit)`
+    ));
+  } catch (err) {
+    // never let usage reporting break a run
+  }
+}
 
 function ensureKimi1Env() {
   CONFIG.setupKimi1Home();
@@ -212,6 +236,7 @@ async function runWithAutoFix(userPrompt, context, options = {}) {
   if (success) {
     if (cache) setCachedResponse(finalPrompt, result.stdout);
     console.log(formatSuccess('Execution completed.'));
+    printRunUsage(sessionId);
     saveSessionTitleByPrompt(userPrompt, process.cwd());
     return;
   }
@@ -255,6 +280,7 @@ async function runWithAutoFix(userPrompt, context, options = {}) {
   if (finalResult.code === 0) {
     if (cache) setCachedResponse(correctionPrompt, finalResult.stdout);
     console.log(formatSuccess('Correction applied.'));
+    printRunUsage(sessionId);
   } else {
     console.log(formatError('Correction failed. Manual review required.'));
   }

@@ -6,7 +6,8 @@ const { loadContext } = require('./context-loader');
 const { runWithAutoFix, launchWithArgs, launchInteractive } = require('./runner');
 const { buildPrompt } = require('./prompt-builder');
 const { uninstall } = require('./uninstall');
-const { listHistory, showSessionDetail, resumeSessionInteractive, cleanEmptySessions, renameAllSessions } = require('./history');
+const { listHistory, showSessionDetail, resumeSessionInteractive, cleanEmptySessions, renameAllSessions, getSessions } = require('./history');
+const usage = require('./usage');
 const { migrateOfficialSessions } = require('./session-migrator');
 const { buildForkSummary } = require('./session-fork');
 const { enableKimiRedirect, disableKimiRedirect } = require('./profile-manager');
@@ -44,8 +45,56 @@ const SHORT_FLAGS = {
   '-np': '--no-preview',
   '-mh': '--migrate-history',
   '-cm': '--compact-mode',
-  '-fk': '--fork'
+  '-fk': '--fork',
+  '-us': '--usage'
 };
+
+function fmtTokens(n) {
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k';
+  return String(n);
+}
+
+function showUsage() {
+  const per = usage.collectPerSession().filter(s =>
+    s.totals.inputOther || s.totals.output || s.totals.cacheRead);
+  if (per.length === 0) {
+    console.log(formatInfo('No usage data yet (run some prompts first).'));
+    return;
+  }
+  const g = usage.grandTotals(per);
+  const rates = usage.loadRates();
+
+  console.log(formatHeader('Kimi token usage'));
+  console.log(`Sessions with usage: ${per.length}   Turns: ${g.turns}`);
+  console.log(`Input (fresh):   ${fmtTokens(g.inputOther)}`);
+  console.log(`Output:          ${fmtTokens(g.output)}`);
+  console.log(`Cache read:      ${fmtTokens(g.cacheRead)}   ${formatInfo(`(${(usage.cacheHitRate(g) * 100).toFixed(0)}% of input served from cache)`)}`);
+  console.log(`Cache creation:  ${fmtTokens(g.cacheCreation)}`);
+  const cost = usage.estimateCost(g, rates);
+  if (cost != null) {
+    console.log(`Est. cost:       ~$${cost.toFixed(2)}   ${formatInfo('(from your usage-rates.json)')}`);
+  } else {
+    console.log(formatInfo(`Cost estimate off. Add ${usage.RATES_FILE} with {"inputPerMtok":..,"outputPerMtok":..} to enable.`));
+  }
+
+  const titles = {};
+  for (const s of getSessions()) titles[s.sessionId] = s.title;
+  const rows = per
+    .map(s => ({ ...s, spend: s.totals.inputOther + s.totals.output }))
+    .sort((a, b) => b.spend - a.spend)
+    .slice(0, 12)
+    .map(s => [
+      (titles[s.sessionId] || s.sessionId.replace('session_', '').slice(0, 8)).slice(0, 32),
+      fmtTokens(s.totals.inputOther),
+      fmtTokens(s.totals.output),
+      fmtTokens(s.totals.cacheRead),
+      String(s.totals.turns)
+    ]);
+  console.log('');
+  console.log(createTable(['Session', 'In', 'Out', 'Cache', 'Turns'], rows));
+  console.log(formatInfo('Tip: huge Cache per turn = a large context carried every turn. Use --fork to start fresh.'));
+}
 
 function normalizeArgs(args) {
   return args.map(arg => SHORT_FLAGS[arg] || arg);
@@ -63,6 +112,7 @@ function showHelp() {
   console.log('kimi1 --list (-l)     plain table of sessions');
   console.log('kimi1 --sessions --id <id> (-id)');
   console.log('kimi1 --sessions --resume <id> (-r)');
+  console.log('kimi1 --usage (-us)   token/cache usage per session + totals');
   console.log('kimi1 --clean-empty (-ce)');
   console.log('kimi1 --rename-sessions (-rs)');
   console.log('kimi1 --migrate-history (-mh)');
@@ -256,6 +306,11 @@ async function main() {
     } else {
       console.log(formatError('No se pudo restaurar la configuracion oficial.'));
     }
+    return;
+  }
+
+  if (args.includes('--usage')) {
+    showUsage();
     return;
   }
 
