@@ -10,7 +10,7 @@ A local wrapper for the official [Kimi Code CLI](https://moonshotai.github.io/ki
 - **Prompt pre-classification**: In prompt mode, `kimi1` heuristically detects whether the user is asking a question or requesting file/tool actions. If no tools are needed, it installs a shorter conversational skill and omits tool-use rules from the system prompt.
 - **Strict no-verbiage**: Forces concise, technical-only responses.
 - **Single-shot auto-correction**: On terminal errors, packages the error + previous output into one final correction prompt instead of looping.
-- **Arrow-key session selector**: `kimi1 --history` opens a Claude-style interactive picker (Up/Down, Enter, Esc).
+- **Arrow-key session selector**: `kimi1 --sessions` opens a Claude-style interactive picker (Up/Down, Enter, Right arrow for a per-session submenu, Esc).
 - **Plain session table**: `kimi1 --list` shows a compact table when you do not need the picker.
 - **Auto-generated session names (0 tokens)**: old sessions are renamed locally from the first user prompt using pattern rules + keyword extraction. No API calls.
 - **Isolated home**: `kimi1` runs under its own `~/.kimi-code-kimi1` directory, leaving the official `~/.kimi-code` untouched.
@@ -42,7 +42,7 @@ During installation you will pick `max_steps_per_turn`, `thinking` mode, and `au
 
 ```powershell
 kimi1 --help
-kimi --history     # same as kimi1 --history
+kimi --sessions    # same as kimi1 --sessions
 kimi --list        # same as kimi1 --list
 ```
 
@@ -74,17 +74,18 @@ kimi1
 kimi1 -S <sessionId>
 kimi1 -c
 
-# Interactive session picker with arrow keys (Enter to open, Esc to cancel)
-kimi1 --history (-h)
+# Interactive session picker with arrow keys
+# (Up/Down move, Enter open, Right arrow -> per-session submenu, Esc cancel)
+kimi1 --sessions (-s)
 
 # Plain table of sessions
 kimi1 --list (-l)
 
 # Session details and resume by ID
-kimi1 --history --id <id> (-id)
-kimi1 --history --resume <id> (-r)
+kimi1 --sessions --id <id> (-id)
+kimi1 --sessions --resume <id> (-r)
 
-# Remove empty/unused sessions (auto-cleaned when opening --history / --list)
+# Remove empty/unused sessions (auto-cleaned when opening --sessions / --list)
 kimi1 --clean-empty (-ce)
 
 # Rename old sessions based on the first prompt (heuristic pattern rules)
@@ -124,7 +125,7 @@ kimi1 --migrate-history (-mh)
 kimi1 --uninstall (-u)
 
 # Help
-kimi1 --help (-he)
+kimi1 --help (-h)
 ```
 
 ## How it works

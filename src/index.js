@@ -18,11 +18,11 @@ const { estimateTokens, formatTokenCount } = require('./token-estimator');
 const SESSION_INDEX = path.join(CONFIG.KIMI1_HOME, 'session_index.jsonl');
 
 // Short flags: first letter, then first+second if there is a collision
-// (including reserved native Kimi flags: -c, -S, -v). Help intentionally
-// does NOT take -h so that -h can be --history (most-used command).
+// (including reserved native Kimi flags: -c, -S, -v). -h/--help is help
+// (universal convention); the session selector is --sessions/-s.
 const SHORT_FLAGS = {
-  '-he': '--help',
-  '-h': '--history',
+  '-h': '--help',
+  '-s': '--sessions',
   '-i': '--interactive',
   '-l': '--list-history',
   '-r': '--resume',
@@ -59,10 +59,10 @@ function showHelp() {
   console.log('kimi1 -c              continue previous session');
   console.log('');
   console.log('After install, these commands also work with "kimi":');
-  console.log('kimi --history (-h)   pick session with arrow keys');
+  console.log('kimi --sessions (-s)  pick session with arrow keys (-> submenu)');
   console.log('kimi1 --list (-l)     plain table of sessions');
-  console.log('kimi1 --history --id <id> (-id)');
-  console.log('kimi1 --history --resume <id> (-r)');
+  console.log('kimi1 --sessions --id <id> (-id)');
+  console.log('kimi1 --sessions --resume <id> (-r)');
   console.log('kimi1 --clean-empty (-ce)');
   console.log('kimi1 --rename-sessions (-rs)');
   console.log('kimi1 --migrate-history (-mh)');
@@ -96,7 +96,7 @@ function showHelp() {
   console.log('');
   console.log('kimi1 --dry-run (-dr) [prompt]');
   console.log('kimi1 --uninstall (-u)');
-  console.log('kimi1 --help (-he)');
+  console.log('kimi1 --help (-h)');
 }
 
 function findSessionWorkDir(sessionId) {
@@ -128,7 +128,7 @@ function getArgValue(args, flags) {
 async function main() {
   const rawArgs = process.argv.slice(2);
 
-  if (rawArgs.includes('--help') || rawArgs.includes('-he')) {
+  if (rawArgs.includes('--help') || rawArgs.includes('-h')) {
     showHelp();
     return;
   }
@@ -311,7 +311,7 @@ async function main() {
     return;
   }
 
-  const historyAliases = ['--history', '--list-history', '--list', '--interactive'];
+  const historyAliases = ['--sessions', '--list-history', '--list', '--interactive'];
   if (historyAliases.some(a => args.includes(a))) {
     const removed = cleanEmptySessions({ silent: true });
     if (removed > 0) {
@@ -319,7 +319,7 @@ async function main() {
     }
     const idIndex = args.indexOf('--id');
     const resumeIndex = args.indexOf('--resume');
-    const interactive = args.includes('--interactive') || args.includes('--history');
+    const interactive = args.includes('--interactive') || args.includes('--sessions');
     const plainList = args.includes('--list-history') || args.includes('--list');
 
     if (resumeIndex !== -1 && args[resumeIndex + 1]) {

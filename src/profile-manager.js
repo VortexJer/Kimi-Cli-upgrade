@@ -139,7 +139,7 @@ function kimi1 { node "${kimi1Script}" @args }
 function kimi {
     param([Parameter(ValueFromRemainingArguments = $true)][string[]]$KimiArgs)
     $kimiExe = (Get-Command kimi -CommandType Application | Select-Object -First 1).Source
-    if ($KimiArgs -contains '--help') {
+    if (($KimiArgs -contains '--help') -or ($KimiArgs -contains '-h')) {
         & $kimiExe --help
         Write-Host ''
         node "${kimi1Script}" --help
@@ -152,7 +152,7 @@ function kimi {
         return
     }
     $kimi1Flags = @{
-        '--history' = $true; '--hist' = $true; '--sessions' = $true; '--select' = $true; '--pick' = $true;
+        '--sessions' = $true; '--select' = $true; '--pick' = $true; '-s' = $true;
         '--list' = $true; '--list-history' = $true; '--table' = $true;
         '--rename-sessions' = $true; '--rs' = $true;
         '--clean-empty' = $true; '--clean' = $true; '--purge' = $true;
@@ -164,9 +164,9 @@ function kimi {
         '--compress' = $true; '--cp' = $true;
         '--cache' = $true; '--ca' = $true;
         '--no-context' = $true; '--nc' = $true;
-        '--fix' = $true; '-f' = $true;
-        '-h' = $true; '-l' = $true; '-rs' = $true; '-ce' = $true; '-dr' = $true;
-        '-e' = $true; '-d' = $true; '-he' = $true; '-i' = $true; '-r' = $true
+        '--fix' = $true; '-f' = $true; '--fork' = $true; '-fk' = $true;
+        '-l' = $true; '-rs' = $true; '-ce' = $true; '-dr' = $true;
+        '-e' = $true; '-d' = $true; '-i' = $true; '-r' = $true
     }
     $useKimi1 = $false
     foreach ($arg in $KimiArgs) {
@@ -187,14 +187,14 @@ function kimi {
 // invoked by absolute path to avoid the function recursing into itself.
 function buildUnixWrapperBlock(kimi1Script, kimiExe, flagPath) {
   const wrapperFlags = [
-    '--history', '-h', '--list', '--list-history', '-l',
+    '--sessions', '-s', '--list', '--list-history', '-l',
     '--rename-sessions', '-rs', '--clean-empty', '-ce',
     '--dry-run', '-dr', '--enable-kimi', '-e', '--disable-kimi', '-d',
     '--restore-official-config', '-roc',
     '--max-steps', '-ms', '--thinking', '-th',
     '--compress', '-cp', '--cache', '-ca', '--no-context', '-nc', '--fix', '-f',
     '--fork', '-fk', '--migrate-history', '-mh', '--compact-mode', '-cm',
-    '--uninstall', '-u', '--help', '-he', '--interactive', '-i',
+    '--uninstall', '-u', '--help', '-h', '--interactive', '-i',
     '--resume', '-r', '--id', '-id'
   ];
   const cases = wrapperFlags.join('|');
