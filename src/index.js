@@ -147,10 +147,14 @@ function showHelp() {
   H.push('Config:');
   H.push(`  ${P} --config (-cfg)      interactive settings hub`);
   H.push(`  ${P} --thinking [on|off] (-th) | --max-steps [<n>] (-ms) | --model [<alias>] (-mo)`);
-  H.push(`  ${P} --doctor (-doc)      health check   |   --restore-official-config (-roc)`);
-  H.push(`  ${P} --enable-kimi (-e) | --disable-kimi (-d)   toggle the "kimi" redirect`);
+  H.push(`  ${P} --doctor (-doc)      health check`);
+  H.push(`  ${P} --dry-run (-dr) [prompt] | --help (-h)`);
   H.push('');
-  H.push(`${P} --dry-run (-dr) [prompt] | --uninstall (-u) | --help (-h)`);
+  // These manage the wrapper itself, so they always use "kimi1" (never the
+  // redirected "kimi", which would read as uninstalling/toggling kimi itself).
+  H.push('Manage the wrapper (always "kimi1"):');
+  H.push('  kimi1 --enable-kimi (-e) | kimi1 --disable-kimi (-d)   toggle the "kimi" redirect');
+  H.push('  kimi1 --restore-official-config (-roc) | kimi1 --uninstall (-u)');
   console.log(H.join('\n'));
 }
 
