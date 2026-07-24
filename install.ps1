@@ -128,11 +128,16 @@ $compactMode = switch ($compactIndex) {
 Write-Host "Setting compact reminder mode to $compactMode..." -ForegroundColor Cyan
 & node "$kimi1Script" --compact-mode $compactMode
 
-# Activate the PowerShell redirect via the wrapper itself
-Write-Host "Activating 'kimi' -> 'kimi1' redirect..." -ForegroundColor Cyan
+# Activate the PowerShell redirect via the wrapper itself. --enable-kimi writes
+# the wrapper block to BOTH profiles (PowerShell 7 and Windows PowerShell 5.1),
+# creating them if missing, so `kimi1`/`kimi` work in either shell.
+Write-Host "Activating 'kimi' -> 'kimi1' redirect (both PowerShell 7 and 5.1)..." -ForegroundColor Cyan
 & node "$kimi1Script" --enable-kimi
 
 Write-Host "`nInstallation complete." -ForegroundColor Green
-Write-Host "Restart PowerShell. From then on 'kimi' will use the kimi1 wrapper." -ForegroundColor Cyan
-Write-Host "To disable the redirect: kimi1 --disable-kimi" -ForegroundColor Cyan
+Write-Host "Close and reopen PowerShell. 'kimi' now uses the kimi1 wrapper in both" -ForegroundColor Cyan
+Write-Host "PowerShell 7 (dark icon) and Windows PowerShell 5.1 (blue icon)." -ForegroundColor Cyan
+Write-Host "  kimi --help    native kimi help + the kimi1 wrapper commands below" -ForegroundColor Gray
+Write-Host "  kimi1 --help   only the wrapper commands" -ForegroundColor Gray
+Write-Host "To disable the redirect: kimi1 --disable-kimi" -ForegroundColor Gray
 Write-Host "To re-run this installer: .\install.ps1" -ForegroundColor Gray
