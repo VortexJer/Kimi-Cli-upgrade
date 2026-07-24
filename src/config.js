@@ -146,8 +146,9 @@ function setupKimi1Home() {
     toml = editTomlKey(toml, 'loop_control', 'max_retries_per_step', 1);
     toml = editTomlKey(toml, 'loop_control', 'reserved_context_size', 8192);
     toml = editTomlKey(toml, 'thinking', 'enabled', 'false');
-    // Trim the per-turn fixed cost: drop rarely-used tool schemas (media/web/plan).
-    toml = editTomlKey(toml, 'tools', 'disabled', tomlStringArray(LEAN_DISABLED_TOOLS));
+    // NOTE: tools are NOT trimmed by default. Measured impact of [tools] disabled
+    // is negligible (the schemas are served from cache), so the full toolset stays
+    // on to avoid removing a tool the user might want. Opt in with: kimi1 --tools lean.
     fs.writeFileSync(dstConfig, toml, 'utf-8');
   }
 

@@ -60,7 +60,8 @@ function buildPrompt(userPrompt, context, options = {}) {
     previousOutput = null,
     compress: doCompress = false,
     preview = true,
-    needsTools = true
+    needsTools = true,
+    files = []
   } = options;
 
   const parts = [];
@@ -92,6 +93,17 @@ function buildPrompt(userPrompt, context, options = {}) {
     parts.push('<contexto_estatico>');
     parts.push(contextBlock);
     parts.push('</contexto_estatico>');
+  }
+
+  // 2b. Files the user inlined with @path
+  if (files && files.length > 0) {
+    parts.push('<archivos_referenciados>');
+    for (const f of files) {
+      parts.push(`<archivo path="${f.path}">`);
+      parts.push(f.content);
+      parts.push('</archivo>');
+    }
+    parts.push('</archivos_referenciados>');
   }
 
   // 3. User instruction or auto-fix payload

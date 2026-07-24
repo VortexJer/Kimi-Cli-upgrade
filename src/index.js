@@ -2,12 +2,13 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const CONFIG = require('./config');
-const { loadContext } = require('./context-loader');
+const { loadContext, loadFileMentions } = require('./context-loader');
 const { runWithAutoFix, launchWithArgs, launchInteractive } = require('./runner');
 const { buildPrompt } = require('./prompt-builder');
 const { uninstall } = require('./uninstall');
 const { listHistory, showSessionDetail, resumeSessionInteractive, cleanEmptySessions, renameAllSessions, getSessions } = require('./history');
 const usage = require('./usage');
+const commands = require('./commands');
 const { migrateOfficialSessions } = require('./session-migrator');
 const { buildForkSummary } = require('./session-fork');
 const { enableKimiRedirect, disableKimiRedirect } = require('./profile-manager');
@@ -114,6 +115,10 @@ function showHelp() {
   console.log('kimi1 --list (-l)     plain table of sessions');
   console.log('kimi1 --sessions --id <id> (-id)');
   console.log('kimi1 --sessions --resume <id> (-r)');
+  console.log('Reference files inline with @path in any prompt, e.g. kimi1 "fix @src/x.js"');
+  console.log('kimi1 --do <name> [args]         run a saved prompt template');
+  console.log('kimi1 --commands                 list saved commands');
+  console.log('kimi1 --save-command <name> "..."  save a template ($ARGUMENTS, $1, $2)');
   console.log('kimi1 --usage (-us)   token/cache usage per session + totals');
   console.log('kimi1 --tools [lean|full] (-tl)  trim per-turn tool schemas (needs kimi>=0.29)');
   console.log('kimi1 --clean-empty (-ce)');
@@ -318,6 +323,53 @@ async function main() {
     return;
   }
 
+  if (args.includes('--commands')) {
+    const list = commands.listCommands();
+    console.log(formatHeader('Saved commands'));
+    if (list.length === 0) {
+      console.log(formatInfo(`None yet. Create one: kimi1 --save-command <name> "<prompt with $ARGUMENTS>"`));
+      console.log(formatInfo(`Or drop a .md file in ${commands.COMMANDS_DIR}`));
+    } else {
+      for (const c of list) console.log(`  ${c.name}  ${formatInfo('— ' + c.summary)}`);
+      console.log(formatInfo('Run one: kimi1 --do <name> [args]'));
+    }
+    return;
+  }
+
+  if (args.includes('--save-command')) {
+    const idx = args.indexOf('--save-command');
+    const name = args[idx + 1];
+    const text = args.slice(idx + 2).join(' ');
+    if (!name || !text) {
+      console.log(formatError('Usage: kimi1 --save-command <name> "<prompt text with $ARGUMENTS>"'));
+      return;
+    }
+    const p = commands.saveCommand(name, text);
+    console.log(formatSuccess(`Saved command "${name}" -> ${p}`));
+    return;
+  }
+
+  if (args.includes('--do')) {
+    const idx = args.indexOf('--do');
+    const name = args[idx + 1];
+    const extra = args.slice(idx + 2).filter(a => !a.startsWith('-'));
+    if (!name) {
+      console.log(formatError('Usage: kimi1 --do <name> [args]'));
+      return;
+    }
+    const expanded = commands.expandCommand(name, extra);
+    if (expanded == null) {
+      console.log(formatError(`No command named "${name}". List them: kimi1 --commands`));
+      return;
+    }
+    const cwd = process.cwd();
+    const context = loadContext(cwd);
+    const files = loadFileMentions(expanded, cwd);
+    console.log(formatInfo(`Running command "${name}"...`));
+    await runWithAutoFix(expanded, context, { fix: false, compress: false, cache: false, preview: false, fast: false, files });
+    return;
+  }
+
   if (args.includes('--tools')) {
     const val = getArgValue(args, ['--tools']);
     if (val === 'lean') {
@@ -452,7 +504,8 @@ async function main() {
     const cwd = process.cwd();
     const context = noContext ? {} : loadContext(cwd);
     const needsTools = likelyNeedsTools(userPrompt);
-    const built = buildPrompt(userPrompt, context, { compress, preview, needsTools });
+    const files = loadFileMentions(userPrompt, cwd);
+    const built = buildPrompt(userPrompt, context, { compress, preview, needsTools, files });
     const contextTokens = estimateTokens(Object.values(context).join('\n'));
     const promptTokens = estimateTokens(built);
     console.log(formatHeader('DRY RUN - Prompt que se enviaria a Kimi'));
@@ -488,7 +541,12 @@ async function main() {
     console.log(formatInfo(`Contexto cargado desde: ${Object.keys(context).join(', ')}`));
   }
 
-  await runWithAutoFix(userPrompt, context, { fix, compress, cache, preview, fast });
+  const files = loadFileMentions(userPrompt, cwd);
+  if (files.length > 0) {
+    console.log(formatInfo(`Archivos inline (@): ${files.map(f => f.path).join(', ')}`));
+  }
+
+  await runWithAutoFix(userPrompt, context, { fix, compress, cache, preview, fast, files });
 }
 
 main().catch(err => {

@@ -55,6 +55,35 @@ function loadContext(cwd) {
   return context;
 }
 
+// Inline files the user referenced with @path in the prompt. Reading them here
+// (controlled, capped) is cheaper and more precise than letting the agent burn
+// tool steps/tokens discovering and reading them. Binary/huge files are skipped.
+function loadFileMentions(prompt, cwd) {
+  const mentions = prompt.match(/@[^\s@]+/g) || [];
+  const files = [];
+  const seen = new Set();
+  for (const raw of mentions) {
+    const rel = raw.slice(1).replace(/[.,;:)\]]+$/, ''); // drop trailing punctuation
+    if (!rel || seen.has(rel)) continue;
+    const full = path.isAbsolute(rel) ? rel : path.join(cwd, rel);
+    try {
+      const st = fs.statSync(full);
+      if (!st.isFile()) continue;
+      seen.add(rel);
+      if (isBinaryFile(full)) {
+        files.push({ path: rel, content: '[binary file omitted]' });
+      } else if (st.size > 100 * 1024) {
+        files.push({ path: rel, content: `[file too large to inline: ${(st.size / 1024).toFixed(0)} KB]` });
+      } else {
+        files.push({ path: rel, content: minifyText(fs.readFileSync(full, 'utf-8')) });
+      }
+    } catch (err) {
+      // not an existing file — leave the @token as plain text
+    }
+  }
+  return files;
+}
+
 function getContextSummary(context) {
   const parts = [];
   if (context['KIMI.md']) {
@@ -69,4 +98,4 @@ function getContextSummary(context) {
   return parts.join('\n\n---\n\n');
 }
 
-module.exports = { loadContext, getContextSummary, minifyText, isBinaryFile, BINARY_EXTENSIONS };
+module.exports = { loadContext, getContextSummary, minifyText, isBinaryFile, BINARY_EXTENSIONS, loadFileMentions };

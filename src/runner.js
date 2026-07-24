@@ -197,7 +197,7 @@ function isMaxStepsExceeded(output) {
 const CONTINUE_PROMPT = `The previous turn hit the max_steps_per_turn limit. Continue the same task from exactly where you stopped. Do not repeat work already completed. Use the prior context and proceed with the next pending action.`;
 
 async function runWithAutoFix(userPrompt, context, options = {}) {
-  const { fix = false, compress = false, cache = false, preview = false, fast = false } = options;
+  const { fix = false, compress = false, cache = false, preview = false, fast = false, files = [] } = options;
 
   const needsTools = likelyNeedsTools(userPrompt);
   // --fast forces the highspeed model. Chat-mode prompts (no tools) also default
@@ -205,7 +205,7 @@ async function runWithAutoFix(userPrompt, context, options = {}) {
   // the driver; tools mode keeps the default model unless --fast is explicit.
   const useFast = fast || !needsTools;
   const model = useFast ? CONFIG.FAST_MODEL : null;
-  const promptTokens = estimateTokens(buildPrompt(userPrompt, context, { compress: compress || false, preview, needsTools }));
+  const promptTokens = estimateTokens(buildPrompt(userPrompt, context, { compress: compress || false, preview, needsTools, files }));
   const contextTokens = estimateTokens(Object.values(context).join('\n'));
 
   console.log(formatHeader('kimi1 wrapper active'));
@@ -220,7 +220,8 @@ async function runWithAutoFix(userPrompt, context, options = {}) {
   const finalPrompt = buildPrompt(userPrompt, context, {
     compress: compress || false,
     preview,
-    needsTools
+    needsTools,
+    files
   });
 
   // Optional response cache for repeated prompts.
